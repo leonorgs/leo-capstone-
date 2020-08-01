@@ -1,0 +1,2865 @@
+---
+title: "Capstone Project R Code"
+author: "Leonor Gutierrez"
+date: "July 27, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+- Packages
+```{r}
+# Q-Q Plot
+# install.packages("ggpubr")
+library(ggpubr)
+
+# Post Hoc Test (dunnTest)
+# install.packages("FSA")
+library(FSA)
+
+# Stepwise Regression
+# install.packages('MASS')
+library(MASS)
+
+# Residual Skewness
+# install.packages("moments")
+library(moments)
+```
+
+
+### **STEP 1: Data Set Preparation**
+
+#### **Raw Data Set September 2009**
+
+- Load data from September 2009
+```{r}
+raw.data.09 <- read.csv("C:/Users/alber/Desktop/Ryerson/6. Spring-Summer 2020/Datasets Original/pub0909.csv")
+head(raw.data.09)
+nrow(raw.data.09)
+```
+
+- Basic stats of Labor Force Status attribute
+```{r}
+summary(raw.data.09$LFSSTAT)
+sum(is.na(raw.data.09$LFSSTAT))
+str(raw.data.09$LFSSTAT)
+```
+
+- Select right observations
+```{r}
+# Only Employed Data
+data.09 <- as.data.frame(raw.data.09[raw.data.09$LFSSTAT < 3,])
+
+# Only Public and Private Sector Employees Data
+data.09 <- as.data.frame(data.09[data.09$COWMAIN < 3,])
+```
+
+- Match values to 2019
+```{r}
+# OCCUPATION Variable to match 2019's NOC_10
+data.09$NOC_10 <- data.09$NOCS_01_25
+sort(unique(data.09$NOC_10))
+table(data.09$NOC_10)
+data.09$NOC_10[data.09$NOC_10 == 2] <- 1
+data.09$NOC_10[data.09$NOC_10 %in% (3:5)] <- 2
+data.09$NOC_10[data.09$NOC_10 == 6] <- 3
+data.09$NOC_10[data.09$NOC_10 %in% (7:8)] <- 4
+data.09$NOC_10[data.09$NOC_10 %in% (9:10)] <- 5
+data.09$NOC_10[data.09$NOC_10 == 11] <- 6
+data.09$NOC_10[data.09$NOC_10 %in% (12:17)] <- 7
+data.09$NOC_10[data.09$NOC_10 %in% (18:22)] <- 8
+data.09$NOC_10[data.09$NOC_10 == 23] <- 9
+data.09$NOC_10[data.09$NOC_10 %in% (24:25)] <- 10
+sort(unique(data.09$NOC_10))
+table(data.09$NOC_10)
+
+# AGE OF YOUNGEST CHILD
+sort(unique(data.09$AGYOWNKN))
+table(data.09$AGYOWNKN)
+data.09$AGYOWNKN[data.09$AGYOWNKN == 2] <- 1
+data.09$AGYOWNKN[data.09$AGYOWNKN == 3] <- 2
+data.09$AGYOWNKN[data.09$AGYOWNKN %in% (4:5)] <- 3
+data.09$AGYOWNKN[data.09$AGYOWNKN == 6] <- 4
+sort(unique(data.09$AGYOWNKN))
+table(data.09$AGYOWNKN)
+
+# CURRENT STUDENT STATUS
+sort(unique(data.09$SCHOOLN))
+table(data.09$SCHOOLN)
+data.09$SCHOOLN[data.09$SCHOOLN %in% seq(from = 2, to = 8, by = 2)] <- 2
+data.09$SCHOOLN[data.09$SCHOOLN %in% seq(from = 3, to = 9, by = 2)] <- 3
+sort(unique(data.09$SCHOOLN))
+table(data.09$SCHOOLN)
+
+```
+
+- Remove variables
+```{r}
+# Remove Out of Dates Variables
+names(data.09)
+data.09 <- subset(data.09, select = -c(ED76to89
+                   , NAICS_43
+                   , SOC80_49
+                   , SOC80_21
+                   , NOCS_01_25
+                   , NOCS_01_47
+                   , WHYPTOLD
+                   , YNOLKOLD
+                   , RELREFN
+                   , EFAMSIZE
+                   , EFAMEMPL
+                   , EFAMUNEM
+                   , SP_AGE7
+                   , SP_LFSST
+                   , SPED7689
+                   , SPED1990
+                   , SP_SOC80
+                   , SP_NOCS01
+                   , SP_UHRSM
+                   , SP_UHRST
+                   , SP_COWM
+                   , SCH1624))
+names(data.09)
+
+# Remove Unemployment and other Variables specified on main report
+data.09 <- subset(data.09, select = -c(AGE_6
+                                       , EVERWORK
+                                       , FTPTLAST
+                                       , YABSENT
+                                       , WKSAWAY
+                                       , PAYAWAY
+                                       , UHRSMAIN
+                                       , AHRSMAIN
+                                       , ATOTHRS
+                                       , HRSAWAY
+                                       , YAWAY
+                                       , PAIDOT
+                                       , UNPAIDOT
+                                       , XTRAHRS
+                                       , WHYPTNEW
+                                       , PREVTEN
+                                       , DURUNEMP
+                                       , FLOWUNEM
+                                       , UNEMFTPT
+                                       , WHYLEFTO
+                                       , WHYLEFTN
+                                       , DURJLESS
+                                       , AVAILABL
+                                       , LKPUBAG
+                                       , LKEMPLOY
+                                       , LKRELS
+                                       , LKATADS
+                                       , LKANSADS
+                                       , LKOTHERN
+                                       , PRIORACT
+                                       , YNOLOOK
+                                       , TLOLOOK
+                                       , FINALWT))
+
+```
+
+- Rename attributes and change column order to match 2019
+```{r}
+# Rename Variables
+names(data.09)[names(data.09) == "EDUC90"] <- "EDUC"
+names(data.09)[names(data.09) == "FILLER1"] <- "IMMIG"
+names(data.09)[names(data.09) == "FILLER2"] <- "NOC_40"
+names(data.09)[names(data.09) == "WHYPTNEW"] <- "WHYPT"
+names(data.09)[names(data.09) == "AGYOWNKN"] <- "AGYOWNK"
+
+# Move variables NOC_10, NAICS_18
+noc10.idx <-  grep("NOC_10", names(data.09))
+naics18.idx <-  grep("NAICS_18", names(data.09))
+data.09 <- data.09[, c(1:13, naics18.idx, noc10.idx, 14, 16:(ncol(data.09)-1))]
+names(data.09)
+```
+
+#### **Raw Data Set September 2019**
+
+- Load data from September 2019
+```{r}
+raw.data.19 <- read.csv("C:/Users/alber/Desktop/Ryerson/6. Spring-Summer 2020/Datasets Original/pub0919.csv")
+head(raw.data.19)
+nrow(raw.data.19)
+```
+
+- Basic stats of Labor Force Status attribute
+```{r}
+summary(raw.data.19$LFSSTAT)
+sum(is.na(raw.data.19$LFSSTAT))
+str(raw.data.19$LFSSTAT)
+```
+
+- Select right observations
+```{r}
+# Only Employed
+data.19 <- as.data.frame(raw.data.19[raw.data.19$LFSSTAT < 3,])
+
+# Only Public and Private Sector Employees
+data.19 <- as.data.frame(data.19[data.19$COWMAIN < 3,])
+```
+
+- Match values to 2019
+```{r}
+# CMA
+sort(unique(data.19$CMA))
+table(data.19$CMA)
+data.19$CMA[data.19$CMA == 2] <- 10
+data.19$CMA[data.19$CMA == 4] <- 2
+data.19$CMA[data.19$CMA == 9] <- 30
+data.19$CMA[data.19$CMA %in% c(1,3,5,6,7,8,0)] <- 4
+data.19$CMA[data.19$CMA == 10] <- 1
+data.19$CMA[data.19$CMA == 30] <- 3
+sort(unique(data.19$CMA))
+table(data.19$CMA)
+
+# NAICS_21 TO NAICS_18 (2009)
+sort(unique(data.19$NAICS_21))
+table(data.19$NAICS_21)
+data.19$NAICS_21[data.19$NAICS_21 %in% (2:4)] <- 2
+data.19$NAICS_21[data.19$NAICS_21 == 5] <- 3
+data.19$NAICS_21[data.19$NAICS_21 == 6] <- 4
+data.19$NAICS_21[data.19$NAICS_21 == 7] <- 5
+data.19$NAICS_21[data.19$NAICS_21 == 8] <- 6
+data.19$NAICS_21[data.19$NAICS_21 == 9] <- 7
+data.19$NAICS_21[data.19$NAICS_21 == 10] <- 8
+data.19$NAICS_21[data.19$NAICS_21 == 11] <- 9
+data.19$NAICS_21[data.19$NAICS_21 %in% (12:13)] <- 10
+data.19$NAICS_21[data.19$NAICS_21 == 14] <- 11
+data.19$NAICS_21[data.19$NAICS_21 == 15] <- 12
+data.19$NAICS_21[data.19$NAICS_21 == 16] <- 13
+data.19$NAICS_21[data.19$NAICS_21 == 17] <- 14
+data.19$NAICS_21[data.19$NAICS_21 == 18] <- 15
+data.19$NAICS_21[data.19$NAICS_21 == 19] <- 16
+data.19$NAICS_21[data.19$NAICS_21 == 20] <- 17
+data.19$NAICS_21[data.19$NAICS_21 == 21] <- 18
+names(data.19)[names(data.19) == "NAICS_21"] <- "NAICS_18"
+sort(unique(data.19$NAICS_18))
+table(data.19$NAICS_18)
+```
+
+- Remove variables
+```{r}
+# Remove Unemployment and other Variables specified on main report
+names(data.19)
+data.19 <- subset(data.19, select = -c(AGE_6
+                                       , EVERWORK
+                                       , FTPTLAST
+                                       , YABSENT
+                                       , WKSAWAY
+                                       , PAYAWAY
+                                       , UHRSMAIN
+                                       , AHRSMAIN
+                                       , ATOTHRS
+                                       , HRSAWAY
+                                       , YAWAY
+                                       , PAIDOT
+                                       , UNPAIDOT
+                                       , XTRAHRS
+                                       , WHYPT
+                                       , PREVTEN
+                                       , DURUNEMP
+                                       , FLOWUNEM
+                                       , UNEMFTPT
+                                       , WHYLEFTO
+                                       , WHYLEFTN
+                                       , DURJLESS
+                                       , AVAILABL
+                                       , LKPUBAG
+                                       , LKEMPLOY
+                                       , LKRELS
+                                       , LKATADS
+                                       , LKANSADS
+                                       , LKOTHERN 
+                                       , PRIORACT
+                                       , YNOLOOK
+                                       , TLOLOOK
+                                       , FINALWT))                      
+
+# Check both data sets have the same variables
+names(data.19)
+names(data.09)
+```
+
+
+#### **Union of 2 data sets into one**
+```{r}
+data.all <- rbind(data.09, data.19)
+str(data.all)
+summary(data.all)
+```
+
+- Missing Values
+```{r}
+# SCHOOLN
+data.all$SCHOOLN[is.na(data.all$SCHOOLN)] <- 4
+summary(data.all$SCHOOLN)
+#AGYOWNK
+data.all$AGYOWNK[is.na(data.all$AGYOWNK)] <- 5
+summary(data.all$AGYOWNK)
+```
+
+- Factor Labels
+```{r}
+# Labor Force Status
+unique(data.all$LFSSTAT)
+str(data.all$LFSSTAT)
+data.all$LFSSTAT <- factor(data.all$LFSSTAT,
+                           levels = c(1, 2),
+                           labels = c("Employed, at work", "Employed, absent from work"))
+str(data.all$LFSSTAT)
+
+# Province
+data.all$PROV <- factor(data.all$PROV,
+                           levels = c(10, 11, 12, 13, 24, 35, 46, 47, 48, 59),
+                           labels = c("NL"
+                                      , "PEI"
+                                      , "NS"
+                                      , "NB"
+                                      , "QC"
+                                      , "ON"
+                                      , "MB"
+                                      , "SK"
+                                      , "AB"
+                                      , "BC"))
+str(data.all$PROV)
+
+# CMA
+sort(unique(data.all$CMA))
+str(data.all$CMA)
+data.all$CMA <- factor(data.all$CMA,
+                           levels = c(1, 2, 3, 4),
+                           labels = c("Montreal", "Toronto", "Vancouver", "Other"))
+str(data.all$CMA)
+
+# Age 12 groups
+sort(unique(data.all$AGE_12))
+str(data.all$AGE_12)
+data.all$AGE_12 <- factor(data.all$AGE_12,
+                       levels = c(1:12),
+                       labels = c("15-19"
+                                  , "20-24"
+                                  , "25-29"
+                                  , "30-34"
+                                  , "35-39" 
+                                  , "40-44" 
+                                  , "45-49" 
+                                  , "50-54"
+                                  , "55-59" 
+                                  , "60-64" 
+                                  , "65-69" 
+                                  , "70-over"),
+                       ordered = TRUE)
+str(data.all$AGE_12)
+
+# Sex
+sort(unique(data.all$SEX))
+str(data.all$SEX)
+data.all$SEX <- factor(data.all$SEX,
+                          levels = c(1, 2),
+                          labels = c("Male", "Female"))
+str(data.all$SEX)
+
+# Marital Status
+sort(unique(data.all$MARSTAT))
+str(data.all$MARSTAT)
+data.all$MARSTAT <- factor(data.all$MARSTAT,
+                       levels = c(1:6),
+                       labels = c("Married"
+                                  , "Common-law" # Living in common-law
+                                  , "Widowed"
+                                  , "Separated"
+                                  , "Divorced"
+                                  , "Single, NM")) # Single, never married
+str(data.all$MARSTAT)
+
+# Education Attainment
+sort(unique(data.all$EDUC))
+str(data.all$EDUC)
+data.all$EDUC <- factor(data.all$EDUC,
+                       levels = c(0:6),
+                       labels = c("0 to 8 years"
+                                  , "Some high school"
+                                  , "High school graduate"
+                                  , "Some postsecondary"
+                                  , "Postsecondary certificate or diploma"
+                                  , "Bachelor's degree"
+                                  , "Above bachelor's degree"),
+                       ordered = TRUE)
+str(data.all$EDUC)
+
+# Add Education column with SHORT NAMES
+data.all$EDUCshort <- data.all$EDUC
+levels(data.all$EDUCshort) <- list(No.HS = "0 to 8 years"
+                                   , Some.HS = "Some high school"
+                                   , HS.grad = "High school graduate"
+                                   , Some.Post = "Some postsecondary"
+                                   , Post.cert = "Postsecondary certificate or diploma"
+                                   , Bachelor = "Bachelor's degree"
+                                   , Above.B = "Above bachelor's degree")
+str(data.all$EDUCshort)
+
+# Single or Multiple Jobholder
+sort(unique(data.all$MJH))
+str(data.all$MJH)
+data.all$MJH <- factor(data.all$MJH,
+                           levels = c(1,2),
+                           labels = c("Single jobholder", "Multiple jobholder"))
+
+str(data.all$MJH)
+
+# Class of Worker, Main Job
+sort(unique(data.all$COWMAIN))
+str(data.all$COWMAIN)
+data.all$COWMAIN <- factor(data.all$COWMAIN,
+                       levels = c(1,2),
+                       labels = c("Public sector", "Private sector"))
+str(data.all$COWMAIN)
+
+# Immigrant Status
+sort(unique(data.all$IMMIG))
+str(data.all$IMMIG)
+data.all$IMMIG <- factor(data.all$IMMIG,
+                       levels = c(1,2,3),
+                       labels = c("Immigrant, landed =< 10 years"
+                                  , "Immigrant, landed > 10 years"
+                                  , "Non-immigrant"))
+str(data.all$IMMIG)
+summary(data.all$IMMIG)
+
+# Industry of main job
+sort(unique(data.all$NAICS_18))
+str(data.all$NAICS_18)
+data.all$NAICS_18 <- factor(data.all$NAICS_18,
+                       levels = c(1:18),
+                       labels = c("Agriculture"
+                                  , "Forestry, Fishing, Min., Oil & Gas"
+                                  , "Utilities"
+                                  , "Construction"
+                                  , "Manufacturing durables"
+                                  , "Manufacturing non-durables"
+                                  , "Wholesale Trade"
+                                  , "Retail Trade"
+                                  , "Transportation & Warehousing"
+                                  , "Finance, Insurance, Real Est. & Leas."
+                                  , "Prof., Scientific & Technical Services"
+                                  , "Management, Admin. & Support"
+                                  , "Educational Services"
+                                  , "Health Care & Social Assistance"
+                                  , "Information, Culture & Recreation"
+                                  , "Accommodation & Food Services"
+                                  , "Other Services"
+                                  , "Public Administration"))
+str(data.all$NAICS_18)
+
+# Add Industry column with SHORT NAMES
+data.all$NAICS_18short <- data.all$NAICS_18
+levels(data.all$NAICS_18short) <- list(Agri = "Agriculture"
+                                       , Fores = "Forestry, Fishing, Min., Oil & Gas" # "Forestry, Fishing, Mining, Oil and Gas"
+                                       , Utils = "Utilities"
+                                       , Const = "Construction"
+                                       , ManuD = "Manufacturing durables"
+                                       , ManuN = "Manufacturing non-durables"
+                                       , Whole = "Wholesale Trade"
+                                       , Rtail = "Retail Trade"
+                                       , Trans = "Transportation & Warehousing"
+                                       , Finan = "Finance, Insurance, Real Est. & Leas." # "Finance, Insurance, Real Estate and Leasing"
+                                       , ProSc = "Prof., Scientific & Technical Services" # "Professional, Scientific and Technical Services"
+                                       , Mngt = "Management, Admin. & Support" # "Management, Administrative and Other Support"
+                                       , Educa = "Educational Services"
+                                       , Health = "Health Care & Social Assistance"
+                                       , Info = "Information, Culture & Recreation"
+                                       , AcFood = "Accommodation & Food Services"
+                                       , Other = "Other Services"
+                                       , PubAd = "Public Administration")
+str(data.all$NAICS_18short)
+
+
+# Occupation at main job (10 categories)
+sort(unique(data.all$NOC_10))
+str(data.all$NOC_10)
+data.all$NOC_10 <- factor(data.all$NOC_10,
+                            levels = c(1:10),
+                            labels = c("Management"
+                                       , "Business, finance & administration"
+                                       , "Natural & applied sciences"
+                                       , "Health"
+                                       , "Educ., law, community & gov. services" # "Education, law and social, community and government services"
+                                       , "Art, culture, recreation & sport"
+                                       , "Sales & service"
+                                       , "Trades, transport & equipm. operators" # "Trades, transport and equipment operators"
+                                       , "Natural resources & agriculture"
+                                       , "Manufacturing & utilities"))
+str(data.all$NOC_10)
+summary(data.all$NOC_10)
+
+# Add Occupation column with SHORT NAMES
+data.all$NOC_10short <- data.all$NOC_10
+levels(data.all$NOC_10short) <- list(Mngt = "Management"
+                                    , BusFin = "Business, finance & administration"
+                                    , NatASc = "Natural & applied sciences"
+                                    , Health ="Health"
+                                    , EduLaw = "Educ., law, community & gov. services"
+                                    , ArtCul = "Art, culture, recreation & sport"
+                                    , Sales = "Sales & service"
+                                    , Trades = "Trades, transport & equipm. operators"
+                                    , NatAgri = "Natural resources & agriculture"
+                                    , ManUtil = "Manufacturing & utilities")
+str(data.all$NOC_10short)
+
+
+# Occupation at main job (40 categories)
+sort(unique(data.all$NOC_40))
+str(data.all$NOC_40)
+data.all$NOC_40 <- factor(data.all$NOC_40,
+                          levels = c(1:40),
+                          labels = c("Senior management"
+                                     ,"Specialized middle management"
+                                     ,"Middle management in retail and wholesale trade and customer services"
+                                     ,"Middle management in trades, transportation, production and utilities"
+                                     ,"Professional occupations in business and finance"
+                                     ,"Administrative and financial supervisors and administrative occupations"
+                                     ,"Finance, insurance and related business administrative occupations"
+                                     ,"Office support"
+                                     ,"Distribution, tracking and scheduling co-ordination"
+                                     ,"Professional occupations in natural and applied sciences"
+                                     ,"Technical occupations related to natural and applied sciences"
+                                     ,"Professional occupations in nursing"
+                                     ,"Professional occupations in health (except nursing)"
+                                     ,"Technical occupations in health"
+                                     ,"Assisting occupations in support of health services"
+                                     ,"Professional occupations in education services"
+                                     ,"Professional occupations in law and social, community and government services"
+                                     ,"Paraprofessional occupations in legal, social, community and education services"
+                                     ,"Front-line public protection services"
+                                     ,"Care providers and educational, legal and public protection support"
+                                     ,"Professional occupations in art and culture"
+                                     ,"Technical occupations in art, culture, recreation and sport"
+                                     ,"Retail sales supervisors and specialized sales"
+                                     ,"Service supervisors and specialized service"
+                                     ,"Sales representatives and salespersons - wholesale and retail trade"
+                                     ,"Service representatives and other customer and personal services occupations"
+                                     ,"Sales support"
+                                     ,"Service support and other service occupations, n.e.c."
+                                     ,"Industrial, electrical and construction trades"
+                                     ,"Maintenance and equipment operation trades"
+                                     ,"Other installers, repairers and servicers and material handlers"
+                                     ,"Transport and heavy equipment operation and related maintenance occupations"
+                                     ,"Trades helpers, construction labourers and related occupations"
+                                     ,"Supervisors and technical occupations in natural resources, agriculture and related production"
+                                     ,"Workers in natural resources, agriculture and related production"
+                                     ,"Harvesting, landscaping and natural resources labourers"
+                                     ,"Processing, manufacturing and utilities supervisors and central control operators"
+                                     ,"Processing and manufacturing machine operators and related production workers"
+                                     ,"Assemblers in manufacturing"
+                                     ,"Labourers in processing, manufacturing and utilities"))
+str(data.all$NOC_40)
+summary(data.all$NOC_40)
+
+
+# Full time or Part time, main job
+sort(unique(data.all$FTPTMAIN))
+str(data.all$FTPTMAIN)
+data.all$FTPTMAIN <- factor(data.all$FTPTMAIN,
+                           levels = c(1,2),
+                           labels = c("Full-time", "Part-time"))
+str(data.all$FTPTMAIN)
+summary(data.all$FTPTMAIN)
+
+
+# Union
+sort(unique(data.all$UNION))
+str(data.all$UNION)
+data.all$UNION <- factor(data.all$UNION,
+                         levels = c(1:3),
+                         labels = c("Union member"
+                                    , "Not member but covered" # Not a member but covered by a union contract
+                                    , "Non-unionized"))
+str(data.all$UNION)
+summary(data.all$UNION)
+
+# Job permanency
+sort(unique(data.all$PERMTEMP))
+str(data.all$PERMTEMP)
+data.all$PERMTEMP <- factor(data.all$PERMTEMP,
+                         levels = c(1:4),
+                         labels = c("Permanent"
+                                    , "Temp. season" # Temporary, seasonal
+                                    , "Temp. contract" # Temporary, term or contract
+                                    , "Temp. casual")) # Temporary, casual or other
+str(data.all$PERMTEMP)
+summary(data.all$PERMTEMP)
+
+
+# Establishment Size (number of employees)
+sort(unique(data.all$ESTSIZE))
+str(data.all$ESTSIZE)
+data.all$ESTSIZE <- factor(data.all$ESTSIZE,
+                            levels = c(1:4),
+                            labels = c("<20"
+                                       , "20-99"
+                                       , "100-500"
+                                       , ">500"),
+                           ordered = TRUE)
+str(data.all$ESTSIZE)
+summary(data.all$ESTSIZE)
+
+# Firm Size (number of employees)
+sort(unique(data.all$FIRMSIZE))
+str(data.all$FIRMSIZE)
+data.all$FIRMSIZE <- factor(data.all$FIRMSIZE,
+                           levels = c(1:4),
+                           labels = c("<20"
+                                      , "20-99"
+                                      , "100-500"
+                                      , ">500"),
+                           ordered = TRUE)
+str(data.all$FIRMSIZE)
+summary(data.all$FIRMSIZE)
+
+# Current Student Status
+sort(unique(data.all$SCHOOLN))
+str(data.all$SCHOOLN)
+data.all$SCHOOLN <- factor(data.all$SCHOOLN,
+                            levels = c(1:4),
+                            labels = c("Non-student"
+                                       , "Full-time student"
+                                       , "Part-time student"
+                                       , "Unknown"))
+str(data.all$SCHOOLN)
+summary(data.all$SCHOOLN)
+
+# Type of Economic Family 
+# Labels meaning:
+# Ind: Unattached individual
+# HWDENC: Husband-wife, dual earner couple, no children or none under 25
+# HWDE17: Husband-wife, dual earner couple, youngest child 0 to 17
+# HWDE24: Husband-wife, dual earner couple, youngest child 18 to 24
+# HWSHNC: Husband-wife, single earner couple, husband employed, no children or none under 25
+# HWSH17: Husband-wife, single earner couple, husband employed, youngest child 0 to 17
+# HWSH24: Husband-wife, single earner couple, husband employed, youngest child 18 to 24
+# HWSWNC: Husband-wife, single earner couple, wife employed, no children or none under 25
+# HWSW17: Husband-wife, single earner couple, wife employed, youngest child 0 to 17
+# HWSW24: Husband-wife, single earner couple, wife employed, youngest child 18 to 24
+# HWNENC: Husband-wife, non-earner couple, no children or none under 25
+# HWNE17: Husband-wife, non-earner couple, youngest child 0 to 17
+# HWNE24: Husband-wife, non-earner couple, youngest child 18 to 24
+# SPE17: Single-parent family, parent employed, youngest child 0 to 17
+# SPE24: Single-parent family, parent employed, youngest child 18 to 24
+# SPN17: Single-parent family, parent not employed, youngest child 0 to 17
+# SPN24: Single-parent family, parent not employed, youngest child 18 to 24
+# Other: Other families
+sort(unique(data.all$EFAMTYPE))
+str(data.all$EFAMTYPE)
+data.all$EFAMTYPE <- factor(data.all$EFAMTYPE,
+                           levels = c(1:18),
+                           labels = c("Ind"
+                                      , "HWDENC"
+                                      , "HWDE17"
+                                      , "HWDE24"
+                                      , "HWSHNC"
+                                      , "HWSH17"
+                                      , "HWSH24"
+                                      , "HWSWNC"
+                                      , "HWSW17"
+                                      , "HWSW24"
+                                      , "HWNENC"
+                                      , "HWNE17"
+                                      , "HWNE24"
+                                      , "SPE17"
+                                      , "SPE24"
+                                      , "SPN17"
+                                      , "SPN24"
+                                      , "Other"))
+str(data.all$EFAMTYPE)
+summary(data.all$EFAMTYPE)
+
+# Age of Youngest Child (Years)
+sort(unique(data.all$AGYOWNK))
+str(data.all$AGYOWNK)
+data.all$AGYOWNK <- factor(data.all$AGYOWNK,
+                            levels = c(1:5),
+                            labels = c(">6"
+                                       , "6-12"
+                                       , "13-17"
+                                       , "18-24"
+                                       , ">24|NC"), # |NC means OR No Children
+                            ordered = TRUE)
+str(data.all$AGYOWNK)
+summary(data.all$AGYOWNK)
+
+
+str(data.all)
+```
+
+- Numeric attributes value adjustment and stats summary
+```{r}
+# NUMERIC VARIABLES REAL VALUES
+data.all$UTOTHRS <- data.all$UTOTHRS/10
+data.all$HRLYEARN <- data.all$HRLYEARN/100
+
+# NUMERIC VARIABLES SUMMARY
+num.vars <- c("UTOTHRS", "TENURE", "HRLYEARN")
+summary(data.all[data.all$SURVYEAR == 2009, num.vars])
+summary(data.all[data.all$SURVYEAR == 2019, num.vars])
+sd(data.all$UTOTHRS[data.all$SURVYEAR == 2009])
+sd(data.all$UTOTHRS[data.all$SURVYEAR == 2019])
+sd(data.all$TENURE[data.all$SURVYEAR == 2009])
+sd(data.all$TENURE[data.all$SURVYEAR == 2019])
+sd(data.all$HRLYEARN[data.all$SURVYEAR == 2009])
+sd(data.all$HRLYEARN[data.all$SURVYEAR == 2019])
+```
+
+
+### **STEP 2: Variable Analysis by Groups**
+
+- Four groups (Males 2009, Males 2019, Females 2009, Females 2019) descriptive stats
+```{r}
+# DESCRIPTIVE STATISTICS BY YEAR AND GENDER
+summary(data.all[data.all$SURVYEAR == 2009 & data.all$SEX == "Male", num.vars])
+summary(data.all[data.all$SURVYEAR == 2019 & data.all$SEX == "Male", num.vars])
+summary(data.all[data.all$SURVYEAR == 2009 & data.all$SEX == "Female", num.vars])
+summary(data.all[data.all$SURVYEAR == 2019 & data.all$SEX == "Female", num.vars])
+
+apply(data.all[data.all$SURVYEAR == 2009 & data.all$SEX == "Male", num.vars], 2, sd)
+apply(data.all[data.all$SURVYEAR == 2009 & data.all$SEX == "Female", num.vars], 2, sd)
+apply(data.all[data.all$SURVYEAR == 2019 & data.all$SEX == "Male", num.vars], 2, sd)
+apply(data.all[data.all$SURVYEAR == 2019 & data.all$SEX == "Female", num.vars], 2, sd)
+```
+
+- Outtliers of numeric variables in each group
+```{r}
+# OUTLIERS IN NUMERIC VARIABLES
+hours <- boxplot(UTOTHRS ~ SURVYEAR + SEX, data = data.all, main = "Usual hours worked")
+hours[c("stats", "n", "names")]
+table(hours$group)
+
+tenure <- boxplot(TENURE ~ SURVYEAR + SEX, data = data.all, main = "Job tenure with current employer")
+tenure[c("stats","n")]
+table(tenure$group)
+
+wage <- boxplot(HRLYEARN ~ SURVYEAR + SEX, data = data.all, main = "Usual hourly wages")
+wage[c("stats","n")]
+table(wage$group)
+```
+
+- Subsets by year and gender
+```{r}
+table(data.all$SURVYEAR, data.all$SEX)
+data.all.09male <- data.all[data.all$SURVYEAR == 2009 & data.all$SEX == "Male",]
+data.all.19male <- data.all[data.all$SURVYEAR == 2019 & data.all$SEX == "Male",]
+data.all.09fem <- data.all[data.all$SURVYEAR == 2009 & data.all$SEX == "Female",]
+data.all.19fem <- data.all[data.all$SURVYEAR == 2019 & data.all$SEX == "Female",]
+```
+
+- Distribution of numeric attributes
+```{r}
+# HISTOGRAMS ###################################################################
+# par(mfrow=c(2, 2))
+par(mar=c(4.1, 4.1, 1.1, 1.1))
+
+# Usual hours worked
+# Males 2009
+hist(data.all.09male$UTOTHRS
+     , xlim = c(0, 100)
+     , ylim = c(0, 0.25)
+     , breaks = 50
+     , freq   = FALSE
+     , cex.lab = 1.5
+     , cex.axis = 1.5
+     , col    = "slategray2"
+     , main   = ""
+     , xlab   = "Usual hours worked")
+curve(dnorm(x, mean = mean(data.all.09male$UTOTHRS)
+            , sd = sd(data.all.09male$UTOTHRS))
+            , col = "royalblue4"
+            , lwd = 2
+            , add = TRUE)
+# Males 2019
+hist(data.all.19male$UTOTHRS
+     , xlim = c(0, 100)
+     , ylim = c(0, 0.25)
+     , breaks = 50
+     , freq   = FALSE
+     , cex.lab = 1.5
+     , cex.axis = 1.5
+     , col    = "slategray2"
+     , main   = ""
+     , xlab   = "Usual hours worked")
+curve(dnorm(x, mean = mean(data.all.19male$UTOTHRS)
+            , sd = sd(data.all.19male$UTOTHRS))
+      , col = "royalblue4"
+      , lwd = 2
+      , add = TRUE)
+# Females 2009
+hist(data.all.09fem$UTOTHRS
+     , xlim = c(0, 100)
+     , ylim = c(0, 0.25)
+     , breaks = 50
+     , freq   = FALSE
+     , cex.lab = 1.5
+     , cex.axis = 1.5
+     , col    = "moccasin"
+     , main   = ""
+     , xlab   = "Usual hours worked")
+curve(dnorm(x, mean = mean(data.all.09fem$UTOTHRS)
+            , sd = sd(data.all.09fem$UTOTHRS))
+      , col = "darkorange2"
+      , lwd = 2
+      , add = TRUE)
+# Females 2019
+hist(data.all.19fem$UTOTHRS
+     , xlim = c(0, 100)
+     , ylim = c(0, 0.25)
+     , breaks = 50
+     , freq   = FALSE
+     , cex.lab = 1.5
+     , cex.axis = 1.5
+     , col    = "moccasin"
+     , main   = ""
+     , xlab   = "Usual hours worked")
+curve(dnorm(x, mean = mean(data.all.19fem$UTOTHRS)
+            , sd = sd(data.all.19fem$UTOTHRS))
+      , col = "darkorange2"
+      , lwd = 2
+      , add = TRUE)
+
+# Tenure
+# Males 2009
+hist(data.all.09male$TENURE
+     , xlim = c(0, 240)
+     , ylim = c(0, 0.03)
+     , breaks = 50
+     , freq   = FALSE
+     , cex.lab = 1.5
+     , cex.axis = 1.5
+     , col    = "slategray2"
+     , main   = ""
+     , xlab   = "Tenure with current employer in months")
+curve(dnorm(x, mean = mean(data.all.09male$TENURE)
+            , sd = sd(data.all.09male$TENURE))
+      , col = "royalblue4"
+      , lwd = 2
+      , add = TRUE)
+# Males 2019
+hist(data.all.19male$TENURE
+     , xlim = c(0, 240)
+     , ylim = c(0, 0.03)
+     , breaks = 50
+     , freq   = FALSE
+     , cex.lab = 1.5
+     , cex.axis = 1.5
+     , col    = "slategray2"
+     , main   = ""
+     , xlab   = "Tenure with current employer in months")
+curve(dnorm(x, mean = mean(data.all.19male$TENURE)
+            , sd = sd(data.all.19male$TENURE))
+      , col = "royalblue4"
+      , lwd = 2
+      , add = TRUE)
+# Females 2009
+hist(data.all.09fem$TENURE
+     , xlim = c(0, 240)
+     , ylim = c(0, 0.03)
+     , breaks = 50
+     , freq   = FALSE
+     , cex.lab = 1.5
+     , cex.axis = 1.5
+     , col    = "moccasin"
+     , main   = ""
+     , xlab   = "Tenure with current employer in months")
+curve(dnorm(x, mean = mean(data.all.09fem$TENURE)
+            , sd = sd(data.all.09fem$TENURE))
+      , col = "darkorange2"
+      , lwd = 2
+      , add = TRUE)
+# Females 2019
+hist(data.all.19fem$TENURE
+     , xlim = c(0, 240)
+     , ylim = c(0, 0.03)
+     , breaks = 50
+     , freq   = FALSE
+     , cex.lab = 1.5
+     , cex.axis = 1.5
+     , col    = "moccasin"
+     , main   = ""
+     , xlab   = "Tenure with current employer in months")
+curve(dnorm(x, mean = mean(data.all.19fem$TENURE)
+            , sd = sd(data.all.19fem$TENURE))
+      , col = "darkorange2"
+      , lwd = 2
+      , add = TRUE)
+
+# Wages
+# Males 2009
+hist(data.all.09male$HRLYEARN
+     , xlim = c(0, 120)
+     , ylim = c(0, 0.085)
+     , breaks = 50
+     , freq   = FALSE
+     , cex.lab = 1.5
+     , cex.axis = 1.5
+     , col    = "slategray2"
+     , main   = ""
+     , xlab   = "Usual hourly wages")
+curve(dnorm(x, mean = mean(data.all.09male$HRLYEARN)
+            , sd = sd(data.all.09male$HRLYEARN))
+      , col = "royalblue4"
+      , lwd = 2
+      , add = TRUE)
+# Males 2019
+hist(data.all.19male$HRLYEARN
+     , xlim = c(0, 120)
+     , ylim = c(0, 0.085)
+     , breaks = 50
+     , freq   = FALSE
+     , cex.lab = 1.5
+     , cex.axis = 1.5
+     , col    = "slategray2"
+     , main   = ""
+     , xlab   = "Usual hourly wages")
+curve(dnorm(x, mean = mean(data.all.19male$HRLYEARN)
+            , sd = sd(data.all.19male$HRLYEARN))
+      , col = "royalblue4"
+      , lwd = 2
+      , add = TRUE)
+# Females 2009
+hist(data.all.09fem$HRLYEARN
+     , xlim = c(0, 120)
+     , ylim = c(0, 0.085)
+     , breaks = 50
+     , freq   = FALSE
+     , col    = "moccasin"
+     , main   = ""
+     , xlab   = "Usual hourly wages")
+curve(dnorm(x, mean = mean(data.all.09fem$HRLYEARN)
+            , sd = sd(data.all.09fem$HRLYEARN))
+      , col = "darkorange2"
+      , lwd = 2
+      , add = TRUE)
+# Females 2019
+hist(data.all.19fem$HRLYEARN
+     , xlim = c(0, 120)
+     , ylim = c(0, 0.085)
+     , breaks = 50
+     , freq   = FALSE
+     , cex.lab = 1.5
+     , cex.axis = 1.5
+     , col    = "moccasin"
+     , main   = ""
+     , xlab   = "Usual hourly wages")
+curve(dnorm(x, mean = mean(data.all.19fem$HRLYEARN)
+            , sd = sd(data.all.19fem$HRLYEARN))
+      , col = "darkorange2"
+      , lwd = 2
+      , add = TRUE)
+
+
+# QQ PLOTS #####################################################################
+# Usual hours worked
+ggqqplot(data.all.09male$UTOTHRS, title = "Males 2009")
+ggqqplot(data.all.19male$UTOTHRS, title = "Males 2019")
+ggqqplot(data.all.09fem$UTOTHRS, title = "Females 2009")
+ggqqplot(data.all.19male$UTOTHRS, title = "Females 2019")
+# Tenure
+ggqqplot(data.all.09male$TENURE, title = "Males 2009")
+ggqqplot(data.all.19male$TENURE, title = "Males 2019")
+ggqqplot(data.all.09fem$TENURE, title = "Females 2009")
+ggqqplot(data.all.19male$TENURE, title = "Females 2019")
+# Wages
+ggqqplot(data.all.09male$HRLYEARN, title = "Males 2009")
+ggqqplot(data.all.19male$HRLYEARN, title = "Males 2019")
+ggqqplot(data.all.09fem$HRLYEARN, title = "Females 2009")
+ggqqplot(data.all.19male$HRLYEARN, title = "Females 2019")
+
+
+# KOLMOGOROV-SMIRNOV ###########################################################
+# Usual Hours Worked
+ks.test(data.all.09male$UTOTHRS, "pnorm", mean = mean(data.all.09male$UTOTHRS), sd = sd(data.all.09male$UTOTHRS))
+ks.test(data.all.19male$UTOTHRS, "pnorm", mean = mean(data.all.19male$UTOTHRS), sd = sd(data.all.19male$UTOTHRS))
+ks.test(data.all.09fem$UTOTHRS, "pnorm", mean = mean(data.all.09fem$UTOTHRS), sd = sd(data.all.09fem$UTOTHRS))
+ks.test(data.all.19fem$UTOTHRS, "pnorm", mean = mean(data.all.19fem$UTOTHRS), sd = sd(data.all.19fem$UTOTHRS))
+# Tenure
+ks.test(data.all.09male$TENURE, "pnorm", mean = mean(data.all.09male$TENURE), sd = sd(data.all.09male$TENURE))
+ks.test(data.all.19male$TENURE, "pnorm", mean = mean(data.all.19male$TENURE), sd = sd(data.all.19male$TENURE))
+ks.test(data.all.09fem$TENURE, "pnorm", mean = mean(data.all.09fem$TENURE), sd = sd(data.all.09fem$TENURE))
+ks.test(data.all.19fem$TENURE, "pnorm", mean = mean(data.all.19fem$TENURE), sd = sd(data.all.19fem$TENURE))
+# Wage
+ks.test(data.all.09male$HRLYEARN, "pnorm", mean = mean(data.all.09male$HRLYEARN), sd = sd(data.all.09male$HRLYEARN))
+ks.test(data.all.19male$HRLYEARN, "pnorm", mean = mean(data.all.19male$HRLYEARN), sd = sd(data.all.19male$HRLYEARN))
+ks.test(data.all.09fem$HRLYEARN, "pnorm", mean = mean(data.all.09fem$HRLYEARN), sd = sd(data.all.09fem$HRLYEARN))
+ks.test(data.all.19fem$HRLYEARN, "pnorm", mean = mean(data.all.19fem$HRLYEARN), sd = sd(data.all.19fem$HRLYEARN))
+
+```
+
+- Correlation of numeric and ordinal variables
+```{r}
+# Pearson (Only numeric)
+round(cor(data.all.09male[num.vars]), 2)
+round(cor(data.all.19male[num.vars]), 2)
+round(cor(data.all.09fem[num.vars]), 2)
+round(cor(data.all.19fem[num.vars]), 2)
+
+# Spearmen (Numeric and Ordinal)
+ord.vars <- c("AGE_12", "EDUC", "ESTSIZE", "FIRMSIZE", "AGYOWNK")
+ord <- lapply(data.all[ord.vars], as.numeric)
+ord.num <- cbind(data.all[num.vars], ord)
+ord.num <- cbind(data.all[c("SURVYEAR", "SEX")], ord.num)
+round(cor(ord.num[ord.num$SURVYEAR == 2009 & ord.num$SEX == "Male", 3:10], method="spearman"), 2)
+round(cor(ord.num[ord.num$SURVYEAR == 2019 & ord.num$SEX == "Male", 3:10], method="spearman"), 2)
+round(cor(ord.num[ord.num$SURVYEAR == 2009 & ord.num$SEX == "Female", 3:10], method="spearman"), 2)
+round(cor(ord.num[ord.num$SURVYEAR == 2019 & ord.num$SEX == "Female", 3:10], method="spearman"), 2)
+```
+
+#### **Hourly Wages Relationship to Other Variables** 
+
+- Hourly Wages vs Numeric Variables: Scatterplot Analysis
+```{r}
+summary(data.all[num.vars])
+
+# HW v. USUAL HOURS WORKED PER WEEK ############################################
+# Males 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(4.5, 4.5, 1.0, 1.0))
+plot(data.all.09male$UTOTHRS
+     , data.all.09male$HRLYEARN
+     , xlim = c(0,120)
+     , ylim = c(0,120)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , xlab="Usual Hours Worked per Week (UTOTHRS)"
+     , ylab="Hourly Wage (HRLYEARN)"
+     )
+lines(lowess(data.all.09male$UTOTHRS, data.all.09male$HRLYEARN), col="red", lwd = 8)
+# Males 2019
+plot(data.all.19male$UTOTHRS
+     , data.all.19male$HRLYEARN
+     , xlim = c(0,120)
+     , ylim = c(0,120)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , xlab="Usual Hours Worked per Week (UTOTHRS)"
+     , ylab="Hourly Wage (HRLYEARN)"
+)
+lines(lowess(data.all.19male$UTOTHRS, data.all.19male$HRLYEARN), col="red", lwd = 8)
+# Females 2009
+plot(data.all.09fem$UTOTHRS
+     , data.all.09fem$HRLYEARN
+     , xlim = c(0,120)
+     , ylim = c(0,120)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , xlab="Usual Hours Worked per Week (UTOTHRS)"
+     , ylab="Hourly Wage (HRLYEARN)"
+)
+lines(lowess(data.all.09fem$UTOTHRS, data.all.09fem$HRLYEARN), col="red", lwd = 8)
+# Females 2019
+plot(data.all.19fem$UTOTHRS
+     , data.all.19fem$HRLYEARN
+     , xlim = c(0,120)
+     , ylim = c(0,120)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , xlab="Usual Hours Worked per Week (UTOTHRS)"
+     , ylab="Hourly Wage (HRLYEARN)"
+)
+lines(lowess(data.all.19fem$UTOTHRS, data.all.19fem$HRLYEARN), col="red", lwd = 8)
+
+# HW v. TENURE #################################################################
+# Males 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(4.5, 4.5, 1.0, 1.0))
+plot(data.all.09male$TENURE
+     , data.all.09male$HRLYEARN
+     , xlim = c(0,240)
+     , ylim = c(0,240)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , xlab="Tenure in Months"
+     , ylab="Hourly Wage (HRLYEARN)"
+)
+lines(lowess(data.all.09male$TENURE, data.all.09male$HRLYEARN), col="red", lwd = 8)
+# Males 2019
+plot(data.all.19male$TENURE
+     , data.all.19male$HRLYEARN
+     , xlim = c(0,240)
+     , ylim = c(0,240)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , xlab="Tenure in Months"
+     , ylab="Hourly Wage (HRLYEARN)"
+)
+lines(lowess(data.all.19male$TENURE, data.all.19male$HRLYEARN), col="red", lwd = 8)
+# Females 2009
+plot(data.all.09fem$TENURE
+     , data.all.09fem$HRLYEARN
+     , xlim = c(0,240)
+     , ylim = c(0,240)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , xlab="Tenure in Months"
+     , ylab="Hourly Wage (HRLYEARN)"
+)
+lines(lowess(data.all.09fem$TENURE, data.all.09fem$HRLYEARN), col="red", lwd = 8)
+# Females 2019
+plot(data.all.19fem$TENURE
+     , data.all.19fem$HRLYEARN
+     , xlim = c(0,240)
+     , ylim = c(0,240)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , xlab="Tenure in Months"
+     , ylab="Hourly Wage (HRLYEARN)"
+)
+lines(lowess(data.all.19fem$TENURE, data.all.19fem$HRLYEARN), col="red", lwd = 8)
+```
+
+- Hourly Wages vs. Ordinal Variables: Boxplot Analysis
+```{r}
+summary(data.all[ord.vars])
+
+# HW v. AGE GROUPS #############################################################
+# Males 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(8, 4.5, 1.0, 1.0))
+plot(data.all.09male$AGE_12
+     , data.all.09male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "slategray2"
+     , xlab=""
+     , ylab="Hourly Wage"
+)
+mtext("Age Groups", side=1, line=5.8, cex =1.8)
+# Males 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(8, 4.5, 1.0, 1.0))
+plot(data.all.19male$AGE_12
+     , data.all.19male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "royalblue"
+     , xlab=""
+     , ylab="Hourly Wage"
+)
+mtext("Age Groups", side=1, line=5.8, cex =1.8)
+# Females 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(8, 4.5, 1.0, 1.0))
+plot(data.all.09fem$AGE_12
+     , data.all.09fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "moccasin"
+     , xlab=""
+     , ylab="Hourly Wage"
+)
+mtext("Age Groups", side=1, line=5.8, cex =1.8)
+# Females 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(8, 4.5, 1.0, 1.0))
+plot(data.all.19fem$AGE_12
+     , data.all.19fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "darkorange"
+     , xlab=""
+     , ylab="Hourly Wage"
+)
+mtext("Age Groups", side=1, line=5.8, cex =1.8)
+
+# HW v. EDUCATION ##############################################################
+# Males 2009
+summary(data.all$EDUCshort)
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(10.5, 5.5, 1.0, 1.0))
+plot(data.all.09male$EDUCshort
+     , data.all.09male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "slategray2"
+     , xlab=""
+     , ylab=""
+)
+mtext("Highest Education Attainment", side=1, line=9, cex =1.8)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Males 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(10.5, 5.5, 1.0, 1.0))
+plot(data.all.19male$EDUCshort
+     , data.all.19male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "royalblue"
+     , xlab=""
+     , ylab=""
+)
+mtext("Highest Education Attainment", side=1, line=9, cex =1.8)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Females 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(10.5, 5.5, 1.0, 1.0))
+plot(data.all.09fem$EDUCshort
+     , data.all.09fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "moccasin"
+     , xlab=""
+     , ylab=""
+)
+mtext("Highest Education Attainment", side=1, line=9, cex =1.8)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Females 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(10.5, 5.5, 1.0, 1.0))
+plot(data.all.19fem$EDUCshort
+     , data.all.19fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "darkorange"
+     , xlab=""
+     , ylab=""
+)
+mtext("Highest Education Attainment", side=1, line=9, cex =1.8)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+
+# HW v. ESTABLISHMENT SIZE #####################################################
+# Males 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+plot(data.all.09male$ESTSIZE
+     , data.all.09male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "slategray2"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Establishment Size", side=1, line=7.5, cex =1.8)
+# mtext("(Number of Employees)", side=1, line=8.8, cex =1.4)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Males 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+plot(data.all.19male$ESTSIZE
+     , data.all.19male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "royalblue"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Establishment Size", side=1, line=7.5, cex =1.8)
+# mtext("(Number of Employees)", side=1, line=8.8, cex =1.4)
+# mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Females 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+plot(data.all.09fem$ESTSIZE
+     , data.all.09fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "moccasin"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Establishment Size", side=1, line=7.5, cex =1.8)
+# mtext("(Number of Employees)", side=1, line=8.8, cex =1.4)
+# mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Females 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+plot(data.all.09fem$ESTSIZE
+     , data.all.09fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "darkorange"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Establishment Size", side=1, line=7.5, cex =1.8)
+# mtext("(Number of Employees)", side=1, line=8.8, cex =1.4)
+# mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+
+# HW v. FIRM SIZE #####################################################
+# Males 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+plot(data.all.09male$FIRMSIZE
+     , data.all.09male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "slategray2"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Firm Size", side=1, line=7.5, cex =1.8)
+# mtext("(Number of Employees)", side=1, line=8.8, cex =1.4)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Males 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+plot(data.all.19male$FIRMSIZE
+     , data.all.19male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "royalblue"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Firm Size", side=1, line=7.5, cex =1.8)
+# mtext("(Number of Employees)", side=1, line=8.8, cex =1.4)
+# mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Females 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+plot(data.all.09fem$FIRMSIZE
+     , data.all.09fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "moccasin"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Firm Size", side=1, line=7.5, cex =1.8)
+# mtext("(Number of Employees)", side=1, line=8.8, cex =1.4)
+# mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Females 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+plot(data.all.09fem$FIRMSIZE
+     , data.all.09fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "darkorange"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Firm Size", side=1, line=7.5, cex =1.8)
+# mtext("(Number of Employees)", side=1, line=8.8, cex =1.4)
+# mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+
+# HW v. AGE OF YOUNGEST CHILD ##################################################
+summary(data.all[ord.vars])
+# Males 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+plot(data.all.09male$AGYOWNK
+     , data.all.09male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "slategray2"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Age of Youngest Child", side=1, line=7.5, cex =1.8)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Males 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+plot(data.all.19male$AGYOWNK
+     , data.all.19male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "royalblue"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Age of Youngest Child", side=1, line=7.5, cex =1.8)
+# mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Females 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+plot(data.all.09fem$AGYOWNK
+     , data.all.09fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "moccasin"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Age of Youngest Child", side=1, line=7.5, cex =1.8)
+# mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Females 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+plot(data.all.09fem$AGYOWNK
+     , data.all.09fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "darkorange"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Age of Youngest Child", side=1, line=7.5, cex =1.8)
+# mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+```
+
+- Hourly Wages vs. Nominal Variables: Boxplot Analysis
+```{r}
+# HW v. PROVINCE ###############################################################
+summary(data.all$PROV)
+# Males 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(4.5, 5.5, 1.0, 1.0))
+prov.order <- with(data.all.09male, reorder(PROV, HRLYEARN, median))
+plot(prov.order
+     , data.all.09male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "slategray2"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Province", side=1, line=7.5, cex =1.8)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+round(tapply(data.all.09male$HRLYEARN, INDEX=data.all.09male$PROV, FUN=median), 2)
+# Males 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(4.5, 5.5, 1.0, 1.0))
+prov.order <- with(data.all.19male, reorder(PROV, HRLYEARN, median))
+plot(prov.order
+     , data.all.19male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "royalblue"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Province", side=1, line=7.5, cex =1.8)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+round(tapply(data.all.19male$HRLYEARN, INDEX=data.all.19male$PROV, FUN=median), 2)
+# Females 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(4.5, 5.5, 1.0, 1.0))
+prov.order <- with(data.all.09fem, reorder(PROV, HRLYEARN, median))
+plot(prov.order
+     , data.all.09fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "moccasin"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Province", side=1, line=7.5, cex =1.8)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+round(tapply(data.all.09fem$HRLYEARN, INDEX=data.all.09fem$PROV, FUN=median), 2)
+# Females 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(4.5, 5.5, 1.0, 1.0))
+prov.order <- with(data.all.19fem, reorder(PROV, HRLYEARN, median))
+plot(prov.order
+     , data.all.19fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "darkorange"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Province", side=1, line=7.5, cex =1.8)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+round(tapply(data.all.19fem$HRLYEARN, INDEX=data.all.19fem$PROV, FUN=median), 2)
+
+
+# HW v. MARITAL STATUS #########################################################
+summary(data.all$MARSTAT)
+# Males 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(10, 5.5, 1.0, 1.0))
+ms.order <- with(data.all.09male, reorder(MARSTAT, HRLYEARN, median))
+plot(ms.order
+     , data.all.09male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "slategray2"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Marital Status", side=1, line=7.5, cex =1.8)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+round(tapply(data.all.09male$HRLYEARN, INDEX=data.all.09male$MARSTAT, FUN=median), 2)
+# Males 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(10, 5.5, 1.0, 1.0))
+ms.order <- with(data.all.19male, reorder(MARSTAT, HRLYEARN, median))
+plot(ms.order
+     , data.all.19male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "royalblue"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Marital Status", side=1, line=7.5, cex =1.8)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+round(tapply(data.all.19male$HRLYEARN, INDEX=data.all.19male$MARSTAT, FUN=median), 2)
+# Females 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(10, 5.5, 1.0, 1.0))
+ms.order <- with(data.all.09fem, reorder(MARSTAT, HRLYEARN, median))
+plot(ms.order
+     , data.all.09fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "moccasin"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Marital Status", side=1, line=7.5, cex =1.8)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+round(tapply(data.all.09fem$HRLYEARN, INDEX=data.all.09fem$MARSTAT, FUN=median), 2)
+# Females 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(10, 5.5, 1.0, 1.0))
+ms.order <- with(data.all.19fem, reorder(MARSTAT, HRLYEARN, median))
+plot(ms.order
+     , data.all.19fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "darkorange"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Marital Status", side=1, line=7.5, cex =1.8)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+round(tapply(data.all.19fem$HRLYEARN, INDEX=data.all.19fem$MARSTAT, FUN=median), 2)
+
+
+# HW v. FULL TIME OR PART TIME #################################################
+summary(data.all$FTPTMAIN)
+# Males 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+ftpt.order <- with(data.all.09male, reorder(FTPTMAIN, HRLYEARN, median))
+plot(ftpt.order
+     , data.all.09male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "slategray2"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Full Time or Part Time Status", side=1, line=7.5, cex =1.8)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Males 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+ftpt.order <- with(data.all.19male, reorder(FTPTMAIN, HRLYEARN, median))
+plot(ftpt.order
+     , data.all.19male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "royalblue"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Full Time or Part Time Status", side=1, line=7.5, cex =1.8)
+# mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Females 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+ftpt.order <- with(data.all.09fem, reorder(FTPTMAIN, HRLYEARN, median))
+plot(ftpt.order
+     , data.all.09fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "moccasin"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Full Time or Part Time Status", side=1, line=7.5, cex =1.8)
+# mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Females 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+ftpt.order <- with(data.all.19fem, reorder(FTPTMAIN, HRLYEARN, median))
+plot(ftpt.order
+     , data.all.19fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "darkorange"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Full Time or Part Time Status", side=1, line=7.5, cex =1.8)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Medians ALL GROUPS
+round(tapply(data.all.09male$HRLYEARN, INDEX=data.all.09male$FTPTMAIN, FUN=median), 2)
+round(tapply(data.all.19male$HRLYEARN, INDEX=data.all.19male$FTPTMAIN, FUN=median), 2)
+round(tapply(data.all.09fem$HRLYEARN, INDEX=data.all.09fem$FTPTMAIN, FUN=median), 2)
+round(tapply(data.all.19fem$HRLYEARN, INDEX=data.all.19fem$FTPTMAIN, FUN=median), 2)
+
+
+# HW v. JOB PERMANENCY #################################################
+summary(data.all$FTPTMAIN)
+# Males 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(12, 5.5, 1.0, 18.0))
+per.order <- with(data.all.09male, reorder(PERMTEMP, HRLYEARN, median))
+plot(per.order
+     , data.all.09male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "slategray2"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Job Permanency", side=1, line=7.5, cex =1.8)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Males 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+per.order <- with(data.all.19male, reorder(PERMTEMP, HRLYEARN, median))
+plot(per.order
+     , data.all.19male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "royalblue"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Full Time or Part Time Status", side=1, line=7.5, cex =1.8)
+# mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Females 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+per.order <- with(data.all.09fem, reorder(PERMTEMP, HRLYEARN, median))
+plot(per.order
+     , data.all.09fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "moccasin"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Full Time or Part Time Status", side=1, line=7.5, cex =1.8)
+# mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Females 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(7.5, 5.5, 1.0, 18.0))
+per.order <- with(data.all.19fem, reorder(PERMTEMP, HRLYEARN, median))
+plot(per.order
+     , data.all.19fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "darkorange"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Full Time or Part Time Status", side=1, line=7.5, cex =1.8)
+# mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Medians ALL GROUPS
+round(tapply(data.all.09male$HRLYEARN, INDEX=data.all.09male$PERMTEMP, FUN=median), 2)
+round(tapply(data.all.19male$HRLYEARN, INDEX=data.all.19male$PERMTEMP, FUN=median), 2)
+round(tapply(data.all.09fem$HRLYEARN, INDEX=data.all.09fem$PERMTEMP, FUN=median), 2)
+round(tapply(data.all.19fem$HRLYEARN, INDEX=data.all.19fem$PERMTEMP, FUN=median), 2)
+
+
+# HW v. ECONOMIC FAMILY ########################################################
+summary(data.all$EFAMTYPE)
+# Males 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+par(mar=c(6, 5.5, 1.0, 1.0))
+efa.order <- with(data.all.09male, reorder(EFAMTYPE, HRLYEARN, median))
+plot(efa.order
+     , data.all.09male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.3
+     , las = 2
+     , col = "slategray2"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Type of Economic Family", side=1, line=7.5, cex =1.8)
+mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Males 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+efa.order <- with(data.all.19male, reorder(EFAMTYPE, HRLYEARN, median))
+plot(efa.order
+     , data.all.19male$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "royalblue"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Type of Economic Family", side=1, line=7.5, cex =1.8)
+# mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Females 2009
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+efa.order <- with(data.all.09fem, reorder(EFAMTYPE, HRLYEARN, median))
+plot(efa.order
+     , data.all.09fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "moccasin"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Type of Economic Family", side=1, line=7.5, cex =1.8)
+# mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Females 2019
+# Default par(mar=c(5.1, 4.1, 4.1, 2.1))
+efa.order <- with(data.all.19fem, reorder(EFAMTYPE, HRLYEARN, median))
+plot(efa.order
+     , data.all.19fem$HRLYEARN
+     , ylim = c(0,115)
+     , cex.lab = 1.8
+     , cex.axis = 1.8
+     , las = 2
+     , col = "darkorange"
+     , xlab=""
+     , ylab=""
+)
+# mtext("Type of Economic Family", side=1, line=7.5, cex =1.8)
+# mtext("Hourly Wage", side=2, line=3.6, cex =1.8)
+# Medians ALL GROUPS
+round(tapply(data.all.09male$HRLYEARN, INDEX=data.all.09male$EFAMTYPE, FUN=median), 2)
+round(tapply(data.all.19male$HRLYEARN, INDEX=data.all.19male$EFAMTYPE, FUN=median), 2)
+round(tapply(data.all.09fem$HRLYEARN, INDEX=data.all.09fem$EFAMTYPE, FUN=median), 2)
+round(tapply(data.all.19fem$HRLYEARN, INDEX=data.all.19fem$EFAMTYPE, FUN=median), 2)
+```
+
+
+### **STEP 3: Hourly Wages by Sector, Industry, and Occupation**
+
+Highest hourly wages by year and gender, among sectors, industries, occupations
+
+- Boxplot Analysis and Kruskall Wallis Tests
+- Results for each group (Males 2009, Males 2019, Females 2009, Females 2019)
+- Industry and Occupation
+```{r}
+# RESULTS BY GROUP #############################################################
+# INDUSTRY #####################################################################
+# Males 2009
+ind.order <- with(data.all.09male, reorder(NAICS_18short, HRLYEARN, median))
+par(mar=c(15,5,2,1))
+wage.ind.09male <- boxplot(HRLYEARN ~ ind.order
+                           , data = data.all.09male
+                           , boxwex = 0.4
+                           , ylim = c(0, 120)
+                           , las = 2
+                           , cex.axis = 1.0
+                           , col = "slategray2"
+                           , xlab = ""
+                           , ylab = "Hourly Wages (HRLYEARN)"
+                           , main = "Males 2009 - Hourly Wage by Industry")
+mtext("Industry (NAICS_18)", side=1, line=4.3)
+rownames(wage.ind.09male$stats) <- c("Lower Fence", "Q1", "Median", "Q3", "Upper Fence")
+colnames(wage.ind.09male$stats) <- c(levels(ind.order))
+wage.ind.09male$stats # Boxplot Summary
+wage.ind.09male$n # Sample size
+table(wage.ind.09male$group) # Total Outliers
+kruskal.test(HRLYEARN ~ NAICS_18short, data = data.all.09male) # Diff. among groups
+# dunnTest(HRLYEARN ~ NAICS_18short, data = data.all.09male, method = "bonferroni") # Post Hoc
+# Males 2019
+ind.order <- with(data.all.19male, reorder(NAICS_18short, HRLYEARN, median))
+par(mar=c(15,5,2,1))
+wage.ind.19male <- boxplot(HRLYEARN ~ ind.order
+                           , data = data.all.19male
+                           , boxwex = 0.4
+                           , ylim = c(0, 120)
+                           , las = 2
+                           , cex.axis = 1.0
+                           , col = "royalblue"
+                           , xlab = ""
+                           , ylab = "Hourly Wages (HRLYEARN)"
+                           , main = "Males 2019 - Hourly Wage by Industry")
+mtext("Industry (NAICS_18)", side=1, line=4.3)
+rownames(wage.ind.19male$stats) <- c("Lower Fence", "Q1", "Median", "Q3", "Upper Fence")
+colnames(wage.ind.19male$stats) <- c(levels(ind.order))
+wage.ind.19male$stats # Boxplot Summary
+wage.ind.19male$n # Sample size
+table(wage.ind.19male$group) # Total Outliers
+kruskal.test(HRLYEARN ~ NAICS_18short, data = data.all.19male) # Diff. among groups
+# dunnTest(HRLYEARN ~ NAICS_18short, data = data.all.19male, method = "bonferroni") # Post Hoc
+# Females 2009
+ind.order <- with(data.all.09fem, reorder(NAICS_18short, HRLYEARN, median))
+par(mar=c(15,5,2,1))
+wage.ind.09fem <- boxplot(HRLYEARN ~ ind.order
+                           , data = data.all.09fem
+                           , boxwex = 0.4
+                           , ylim = c(0, 120)
+                           , las = 2
+                           , cex.axis = 1.0
+                           , col = "moccasin"
+                           , xlab = ""
+                           , ylab = "Hourly Wages (HRLYEARN)"
+                           , main = "Females 2009 - Hourly Wage by Industry")
+mtext("Industry (NAICS_18)", side=1, line=4.3)
+rownames(wage.ind.09fem$stats) <- c("Lower Fence", "Q1", "Median", "Q3", "Upper Fence")
+colnames(wage.ind.09fem$stats) <- c(levels(ind.order))
+wage.ind.09fem$stats # Boxplot Summary
+wage.ind.09fem$n # Sample size
+table(wage.ind.09fem$group) # Total Outliers
+kruskal.test(HRLYEARN ~ NAICS_18short, data = data.all.09fem) # Diff. among groups
+# dunnTest(HRLYEARN ~ NAICS_18short, data = data.all.09fem, method = "bonferroni") # Post Hoc
+# Females 2019
+ind.order <- with(data.all.19fem, reorder(NAICS_18short, HRLYEARN, median))
+par(mar=c(15,5,2,1))
+wage.ind.19fem <- boxplot(HRLYEARN ~ ind.order
+                           , data = data.all.19fem
+                           , boxwex = 0.4
+                           , ylim = c(0, 120)
+                           , las = 2
+                           , cex.axis = 1.0
+                           , col = "darkorange"
+                           , xlab = ""
+                           , ylab = "Hourly Wages (HRLYEARN)"
+                           , main = "Females 2019 - Hourly Wage by Industry")
+mtext("Industry (NAICS_18)", side=1, line=4.3)
+rownames(wage.ind.19fem$stats) <- c("Lower Fence", "Q1", "Median", "Q3", "Upper Fence")
+colnames(wage.ind.19fem$stats) <- c(levels(ind.order))
+wage.ind.19fem$stats # Boxplot Summary
+wage.ind.19fem$n # Sample size
+table(wage.ind.19fem$group) # Total Outliers
+kruskal.test(HRLYEARN ~ NAICS_18short, data = data.all.19fem) # Diff. among groups
+# dunnTest(HRLYEARN ~ NAICS_18short, data = data.all.19fem, method = "bonferroni") # Post Hoc
+
+# RESULTS BY GROUP #############################################################
+# OCCUPATION ###################################################################
+# Males 2009
+occu.order.male09 <- with(data.all.09male, reorder(NOC_10short, HRLYEARN, median))
+par(mar=c(16,5,2,1))
+wage.occu.09male <- boxplot(HRLYEARN ~ occu.order.male09
+                           , data = data.all.09male
+                           , boxwex = 0.4
+                           , ylim = c(0, 120)
+                           , las = 2
+                           , cex.axis = 1.0
+                           , col = "slategray2"
+                           , xlab = ""
+                           , ylab = "Hourly Wages (HRLYEARN)"
+                           , main = "Males 2009 - Hourly Wage by Occupation")
+mtext("Occupation (NOC_10)", side=1, line=4.3)
+rownames(wage.occu.09male$stats) <- c("LowFence", "Q1", "Median", "Q3", "UpFence")
+colnames(wage.occu.09male$stats) <- c(levels(occu.order.male09))
+wage.occu.09male$stats
+wage.occu.09male$n #Sample size
+table(wage.occu.09male$group) #Total Outliers
+kruskal.test(HRLYEARN ~ NOC_10, data = data.all.09male) # Diff. among groups
+# dunnTest(HRLYEARN ~ NOC_10, data = data.all.09male, method = "bonferroni") # Post Hoc
+# Males 2019
+occu.order.male19 <- with(data.all.19male, reorder(NOC_10short, HRLYEARN, median))
+par(mar=c(16,5,2,1))
+wage.occu.19male <- boxplot(HRLYEARN ~ occu.order.male19
+                            , data = data.all.19male
+                            , boxwex = 0.4
+                            , ylim = c(0, 120)
+                            , las = 2
+                            , cex.axis = 1.0
+                            , col = "royalblue"
+                            , xlab = ""
+                            , ylab = "Hourly Wages (HRLYEARN)"
+                            , main = "Males 2019 - Hourly Wage by Occupation")
+mtext("Occupation (NOC_10)", side=1, line=4.3)
+rownames(wage.occu.19male$stats) <- c("LowFence", "Q1", "Median", "Q3", "UpFence")
+colnames(wage.occu.19male$stats) <- c(levels(occu.order.male19))
+wage.occu.19male$stats
+wage.occu.19male$n #Sample size
+table(wage.occu.19male$group) #Total Outliers
+kruskal.test(HRLYEARN ~ NOC_10, data = data.all.19male) # Diff. among groups
+# dunnTest(HRLYEARN ~ NOC_10, data = data.all.19male, method = "bonferroni") # Post Hoc
+# Females 2009
+occu.order.fem09 <- with(data.all.09fem, reorder(NOC_10short, HRLYEARN, median))
+par(mar=c(16,5,2,1))
+wage.occu.09fem <- boxplot(HRLYEARN ~ occu.order.fem09
+                            , data = data.all.09fem
+                            , boxwex = 0.4
+                            , ylim = c(0, 120)
+                            , las = 2
+                            , cex.axis = 1.0
+                            , col = "moccasin"
+                            , xlab = ""
+                            , ylab = "Hourly Wages (HRLYEARN)"
+                            , main = "Females 2009 - Hourly Wage by Occupation")
+mtext("Occupation (NOC_10)", side=1, line=4.3)
+rownames(wage.occu.09fem$stats) <- c("LoFence", "Q1", "Median", "Q3", "UpFence")
+colnames(wage.occu.09fem$stats) <- c(levels(occu.order.fem09))
+wage.occu.09fem$stats
+wage.occu.09fem$n #Sample size
+table(wage.occu.09fem$group) #Total Outliers
+kruskal.test(HRLYEARN ~ NOC_10, data = data.all.09fem) # Diff. among groups
+# dunnTest(HRLYEARN ~ NOC_10, data = data.all.09fem, method = "bonferroni") # Post Hoc
+# Females 2019
+occu.order.fem19 <- with(data.all.19fem, reorder(NOC_10short, HRLYEARN, median))
+par(mar=c(16,5,2,1))
+wage.occu.19fem <- boxplot(HRLYEARN ~ occu.order.fem19
+                            , data = data.all.19fem
+                            , boxwex = 0.4
+                            , ylim = c(0, 120)
+                            , las = 2
+                            , cex.axis = 1.0
+                            , col = "darkorange"
+                            , xlab = ""
+                            , ylab = "Hourly Wages (HRLYEARN)"
+                            , main = "Females 2019 - Hourly Wage by Occupation")
+mtext("Occupation (NOC_10)", side=1, line=4.3)
+rownames(wage.occu.19fem$stats) <- c("LoFence", "Q1", "Median", "Q3", "UpFence")
+colnames(wage.occu.19fem$stats) <- c(levels(occu.order.fem19))
+wage.occu.19fem$stats
+wage.occu.19fem$n #Sample size
+table(wage.occu.19fem$group) #Total Outliers
+kruskal.test(HRLYEARN ~ NOC_10, data = data.all.19fem) # Diff. among groups
+# dunnTest(HRLYEARN ~ NOC_10, data = data.all.19fem, method = "bonferroni") # Post Hoc
+```
+
+- Comparison between years, by gender
+- Mann-Whitney U Tests and Boxplot Analysis
+- Sector, Industry and Occupation
+```{r}
+# 2009 v. 2019 ################################################################
+# SECTOR ######################################################################
+# Mann Whitney U Test
+wilcox.test(HRLYEARN ~ COWMAIN,  data = data.all.09male, alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ COWMAIN,  data = data.all.19male, alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ COWMAIN,  data = data.all.09fem, alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ COWMAIN,  data = data.all.19fem, alt = "two.sided", conf.int = T)
+# MALES
+# Boxplot Analysis
+par(mfrow=c(1, 1))
+par(mar=c(16,5,2,1))
+summary(data.all$HRLYEARN[data.all$SEX == "Male"])
+sec.order.male <- with(data.all[data.all$SEX == "Male",], reorder(COWMAIN, HRLYEARN, median))
+wage.sec.male <- boxplot(HRLYEARN ~ SURVYEAR * sec.order.male
+                          , data = data.all[data.all$SEX == "Male",]
+                          , boxwex = 0.4
+                          , ylim = c(0, 120)
+                          , las = 1
+                          , cex.axis = 1.0
+                          , col = c("slategray2", "royalblue")
+                          , xaxt = "n"
+                          , xlab = ""
+                          , ylab = "Hourly Wages (HRLYEARN)"
+                          , main = "Males Hourly Wage by Year and Sector")
+# Label of X Axis
+axis(1
+     , at = seq(1.5, 4, 2)
+     , labels = levels(sec.order.male)
+     , tick=FALSE
+     , cex=0.3
+     , las = 1)
+# Grey Vertical Lines
+for(i in seq(0.5, 6, 2)){ 
+  abline(v=i,lty=1, col="grey")
+}
+# Add a legend
+legend("topleft", legend = c("Males 2009", "Males 2019"), 
+       col=c("slategray2", "royalblue"),
+       pch = 15, bty = "n", pt.cex = 2, cex = 1.0,  horiz = T, inset = c(0.01, 0.01))
+# Boxplot Stats
+rownames(wage.sec.male$stats) <- c("Lower Fence", "Q1", "Median", "Q3", "Upper Fence")
+colnames(wage.sec.male$stats) <- wage.sec.male$names
+wage.sec.male$stats # Boxplot Summary
+wage.sec.male$n # Sample size
+table(wage.sec.male$group) # Total Outliers
+# FEMALES
+summary(data.all$HRLYEARN[data.all$SEX == "Female"])
+sec.order.fem <- with(data.all[data.all$SEX == "Female",], reorder(COWMAIN, HRLYEARN, median))
+wage.sec.fem <- boxplot(HRLYEARN ~ SURVYEAR * sec.order.fem
+                         , data = data.all[data.all$SEX == "Female",]
+                         , boxwex = 0.4
+                         , ylim = c(0, 120)
+                         , las = 1
+                         , cex.axis = 1.0
+                         , col = c("moccasin", "darkorange2")
+                         , xaxt = "n"
+                         , xlab = ""
+                         , ylab = "Hourly Wages (HRLYEARN)"
+                         , main = "Females Hourly Wage by Year and Sector")
+# Label of X Axis
+axis(1
+     , at = seq(1.5, 4, 2)
+     , labels = levels(sec.order.fem)
+     , tick=FALSE
+     , cex=0.3
+     , las = 1)
+# Grey Vertical Lines
+for(i in seq(0.5, 6, 2)){ 
+  abline(v=i,lty=1, col="grey")
+}
+# Add a legend
+legend("topleft", legend = c("Females 2009", "Females 2019"), 
+       col=c("moccasin", "darkorange"),
+       pch = 15, bty = "n", pt.cex = 2, cex = 1.0,  horiz = T, inset = c(0.01, 0.01))
+# Boxplot Stats
+rownames(wage.sec.fem$stats) <- c("Lower Fence", "Q1", "Median", "Q3", "Upper Fence")
+colnames(wage.sec.fem$stats) <- wage.sec.fem$names
+wage.sec.fem$stats # Boxplot Summary
+wage.sec.fem$n # Sample size
+table(wage.sec.fem$group) # Total Outliers
+
+
+# 2009 v. 2019 ################################################################
+# INDUSTRY ####################################################################
+# MALES
+# Mann Whitney U Test
+wilcox.test(HRLYEARN ~ SURVYEAR,  data = data.all[data.all$SEX == "Male" & data.all$NAICS_18short == "Utils",], alt = "two.sided", conf.int = T) # Top1
+wilcox.test(HRLYEARN ~ SURVYEAR,  data = data.all[data.all$SEX == "Male" & data.all$NAICS_18short == "PubAd",], alt = "two.sided", conf.int = T) # Top2
+wilcox.test(HRLYEARN ~ SURVYEAR,  data = data.all[data.all$SEX == "Male" & data.all$NAICS_18short == "Fores",], alt = "two.sided", conf.int = T) # Top3
+wilcox.test(HRLYEARN ~ SURVYEAR,  data = data.all[data.all$SEX == "Male" & data.all$NAICS_18short == "Educa",], alt = "two.sided", conf.int = T) # Top4
+wilcox.test(HRLYEARN ~ SURVYEAR,  data = data.all[data.all$SEX == "Male" & data.all$NAICS_18short == "ProSc",], alt = "two.sided", conf.int = T) # Top5
+# Boxplot Analysis
+par(mfrow=c(1, 1))
+par(mar=c(16,5,2,1))
+summary(data.all$HRLYEARN[data.all$SEX == "Male"])
+ind.order.male <- with(data.all[data.all$SEX == "Male",], reorder(NAICS_18short, HRLYEARN, median))
+wage.ind.male <- boxplot(HRLYEARN ~ SURVYEAR * ind.order.male
+                         , data = data.all[data.all$SEX == "Male",]
+                         , boxwex = 0.4
+                         , ylim = c(0, 120)
+                         , cex.axis = 1.0
+                         , col = c("slategray2", "royalblue")
+                         , xaxt = "n"
+                         , xlab = ""
+                         , ylab = "Hourly Wages (HRLYEARN)"
+                         , main = "Males Hourly Wage by Year and Industry")
+mtext("Industry (NAICS_18)", side=1, line=4.3)
+# Label of X Axis
+axis(1
+     , at = seq(1.5, 36, 2)
+     , labels = levels(ind.order.male)
+     , tick=FALSE
+     , cex=0.3
+     , las = 2)
+# Grey Vertical Lines
+for(i in seq(0.5, 40, 2)){ 
+  abline(v=i,lty=1, col="grey")
+}
+# Add a legend
+legend("topleft", legend = c("Males 2009", "Males 2019"), 
+       col=c("slategray2", "royalblue"),
+       pch = 15, bty = "n", pt.cex = 2, cex = 1.0,  horiz = T, inset = c(0.01, 0.01))
+# Boxplot Stats
+rownames(wage.ind.male$stats) <- c("Lower Fence", "Q1", "Median", "Q3", "Upper Fence")
+colnames(wage.ind.male$stats) <- wage.ind.male$names
+wage.ind.male$stats # Boxplot Summary
+wage.ind.male$n # Sample size
+table(wage.ind.male$group) # Total Outliers
+# FEMALES
+# Mann Whitney U Test
+wilcox.test(HRLYEARN ~ SURVYEAR,  data = data.all[data.all$SEX == "Female" & data.all$NAICS_18short == "Utils",], alt = "two.sided", conf.int = T) # Top1
+wilcox.test(HRLYEARN ~ SURVYEAR,  data = data.all[data.all$SEX == "Female" & data.all$NAICS_18short == "Fores",], alt = "two.sided", conf.int = T) # Top3
+wilcox.test(HRLYEARN ~ SURVYEAR,  data = data.all[data.all$SEX == "Female" & data.all$NAICS_18short == "PubAd",], alt = "two.sided", conf.int = T) # Top2
+wilcox.test(HRLYEARN ~ SURVYEAR,  data = data.all[data.all$SEX == "Female" & data.all$NAICS_18short == "Educa",], alt = "two.sided", conf.int = T) # Top4
+wilcox.test(HRLYEARN ~ SURVYEAR,  data = data.all[data.all$SEX == "Female" & data.all$NAICS_18short == "ProSc",], alt = "two.sided", conf.int = T) # Top5
+# Boxplot Analysis
+par(mfrow=c(1, 1))
+par(mar=c(16,5,2,1))
+summary(data.all$HRLYEARN[data.all$SEX == "Female"])
+ind.order.fem <- with(data.all[data.all$SEX == "Female",], reorder(NAICS_18short, HRLYEARN, median))
+wage.ind.fem <- boxplot(HRLYEARN ~ SURVYEAR * ind.order.fem
+                         , data = data.all[data.all$SEX == "Female",]
+                         , boxwex = 0.4
+                         , ylim = c(0, 120)
+                         , cex.axis = 1.0
+                         , col = c("moccasin", "darkorange")
+                         , xaxt = "n"
+                         , xlab = ""
+                         , ylab = "Hourly Wages (HRLYEARN)"
+                         , main = "Females Hourly Wage by Year and Industry")
+mtext("Industry (NAICS_18)", side=1, line=4.3)
+# Label of X Axis
+axis(1
+     , at = seq(1.5, 36, 2)
+     , labels = levels(ind.order.fem)
+     , tick=FALSE
+     , cex=0.3
+     , las = 2)
+# Grey Vertical Lines
+for(i in seq(0.5, 40, 2)){ 
+  abline(v=i,lty=1, col="grey")
+}
+# Add a legend
+legend("topleft", legend = c("Females 2009", "Females 2019"), 
+       col=c("moccasin", "darkorange"),
+       pch = 15, bty = "n", pt.cex = 2, cex = 1.0,  horiz = T, inset = c(0.01, 0.01))
+# Boxplot Stats
+rownames(wage.ind.fem$stats) <- c("Lower Fence", "Q1", "Median", "Q3", "Upper Fence")
+colnames(wage.ind.fem$stats) <- wage.ind.fem$names
+wage.ind.fem$stats # Boxplot Summary
+wage.ind.fem$n # Sample size
+table(wage.ind.fem$group) # Total Outliers
+
+
+# 2009 v. 2019 ################################################################
+# OCCUPATION ##################################################################
+# MALES
+# Mann Whitney U Test
+wilcox.test(HRLYEARN ~ SURVYEAR,  data = data.all[data.all$SEX == "Male" & data.all$NOC_10short == "Mngt",], alt = "two.sided", conf.int = T) # Top1
+wilcox.test(HRLYEARN ~ SURVYEAR,  data = data.all[data.all$SEX == "Male" & data.all$NOC_10short == "EduLaw",], alt = "two.sided", conf.int = T) # Top2
+wilcox.test(HRLYEARN ~ SURVYEAR,  data = data.all[data.all$SEX == "Male" & data.all$NOC_10short == "NatASc",], alt = "two.sided", conf.int = T) # Top3
+# Boxplot Analysis
+occu.order.male <- with(data.all[data.all$SEX == "Male",], reorder(NOC_10short, HRLYEARN, median))
+par(mar=c(16,5,2,1))
+wage.occu.male <- boxplot(HRLYEARN ~ SURVYEAR * occu.order.male
+                            , data = data.all[data.all$SEX == "Male",]
+                            , boxwex = 0.4
+                            , las = 2
+                            , cex.axis = 1.0
+                            , col = c("slategray2", "royalblue")
+                            , xaxt = "n"
+                            , xlab = ""
+                            , ylab = "Hourly Wages (HRLYEARN)"
+                            , main = "Males Hourly Wage by Year and Occupation")
+mtext("Occupation (NOC_10)", side=1, line=4.3)
+# Label of X Axis
+axis(1
+     , at = seq(1.5, 20, 2)
+     , labels = levels(occu.order.male)
+     , tick=FALSE
+     , cex=0.3
+     , las = 2)
+# Grey Vertical Lines
+for(i in seq(0.5, 20, 2)){ 
+  abline(v=i,lty=1, col="grey")
+}
+# Add a legend
+legend("topleft", legend = c("Males 2009", "Males 2019"), 
+       col=c("slategray2", "royalblue"),
+       pch = 15, bty = "n", pt.cex = 2, cex = 1.0,  horiz = T, inset = c(0.01, 0.01))
+wage.occu.male$stats
+# Boxplot Stats
+rownames(wage.occu.male$stats) <- c("LowFence", "Q1", "Median", "Q3", "UpFence")
+colnames(wage.occu.male$stats) <- wage.occu.male$names
+wage.occu.male$stats # Boxplot Summary
+wage.occu.male$n # Sample size
+table(wage.occu.male$group) # Total Outliers
+# FEMALES
+# Mann Whitney U Test
+wilcox.test(HRLYEARN ~ SURVYEAR,  data = data.all[data.all$SEX == "Female" & data.all$NOC_10short == "Mngt",], alt = "two.sided", conf.int = T) # Top1
+wilcox.test(HRLYEARN ~ SURVYEAR,  data = data.all[data.all$SEX == "Female" & data.all$NOC_10short == "NatASc",], alt = "two.sided", conf.int = T) # Top2
+wilcox.test(HRLYEARN ~ SURVYEAR,  data = data.all[data.all$SEX == "Female" & data.all$NOC_10short == "EduLaw",], alt = "two.sided", conf.int = T) # Top3
+# Boxplot Analysis
+occu.order.fem <- with(data.all[data.all$SEX == "Female",], reorder(NOC_10short, HRLYEARN, median))
+par(mar=c(16,5,2,1))
+wage.occu.fem <- boxplot(HRLYEARN ~ SURVYEAR * occu.order.fem
+                          , data = data.all[data.all$SEX == "Female",]
+                          , boxwex = 0.4
+                          , las = 2
+                          , cex.axis = 1.0
+                          , col = c("moccasin", "darkorange")
+                          , xaxt = "n"
+                          , xlab = ""
+                          , ylab = "Hourly Wages (HRLYEARN)"
+                          , main = "Females Hourly Wage by Year and Occupation")
+mtext("Occupation (NOC_10)", side=1, line=4.3)
+# Label of X Axis
+axis(1
+     , at = seq(1.5, 20, 2)
+     , labels = levels(occu.order.fem)
+     , tick=FALSE
+     , cex=0.3
+     , las = 2)
+# Grey Vertical Lines
+for(i in seq(0.5, 20, 2)){ 
+  abline(v=i,lty=1, col="grey")
+}
+# Add a legend
+legend("topleft", legend = c("Females 2009", "Females 2019"), 
+       col=c("moccasin", "darkorange"),
+       pch = 15, bty = "n", pt.cex = 2, cex = 1.0,  horiz = T, inset = c(0.01, 0.01))
+wage.occu.fem$stats
+# Boxplot Stats
+rownames(wage.occu.fem$stats) <- c("LoFence", "Q1", "Median", "Q3", "UpFence")
+colnames(wage.occu.fem$stats) <- wage.occu.fem$names
+wage.occu.fem$stats # Boxplot Summary
+wage.occu.fem$n # Sample size
+table(wage.occu.fem$group) # Total Outliers
+```
+
+- Comparison between genders in 2019
+- Mann-Whitney U Tests and Boxplot Analysis
+- Sector, Industry and Occupation
+```{r}
+# Males v. Females #############################################################
+# SECTOR #######################################################################
+# Mann Whitney U Tests
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$COWMAIN == "Private sector",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$COWMAIN == "Public sector",], alt = "two.sided", conf.int = T)
+# Boxplot Analysis
+sec.order.19 <- with(data.all[data.all$SURVYEAR == 2019,], reorder(COWMAIN, HRLYEARN, median))
+par(mar=c(16,5,2,1))
+wage.sec.19 <- boxplot(HRLYEARN ~ SEX * sec.order.19
+                        , data = data.all[data.all$SURVYEAR == 2019,]
+                        , boxwex = 0.4
+                        , ylim = c(0, 120)
+                        , las = 2
+                        , cex.axis = 1.0
+                        , col = c("royalblue", "darkorange")
+                        , xaxt = "n"
+                        , xlab = ""
+                        , ylab = "Hourly Wages (HRLYEARN)"
+                        , main = "Hourly Wage by Sector - 2019 Gender Comparison")
+# Label of X Axis
+axis(1
+     , at = seq(1.5, 4, 2)
+     , labels = levels(sec.order.19)
+     , tick=FALSE
+     , cex=0.3
+     , las = 1)
+# Grey Vertical Lines
+for(i in seq(0.5, 6, 2)){ 
+  abline(v=i,lty=1, col="grey")
+}
+# Add a legend
+legend("topleft", legend = c("Males 2019", "Females 2019"), 
+       col=c("royalblue", "darkorange"),
+       pch = 15, bty = "n", pt.cex = 2, cex = 1.0,  horiz = T, inset = c(0.01, 0.01))
+wage.sec.19$stats
+
+# Males v. Females #############################################################
+# INDUSTRY #####################################################################
+# Mann Whitney U Tests
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Agri",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Fores",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Utils",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Const",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "ManuD",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "ManuN",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Whole",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Rtail",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Trans",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Finan",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "ProSc",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Mngt",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Educa",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Health",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Info",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "AcFood",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Other",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "PubAd",], alt = "two.sided", conf.int = T)
+# Boxplot Analysis
+ind.order.19 <- with(data.all[data.all$SURVYEAR == 2019,], reorder(NAICS_18short, HRLYEARN, median))
+par(mar=c(16,5,2,1))
+wage.ind.19 <- boxplot(HRLYEARN ~ SEX * ind.order.19
+                        , data = data.all[data.all$SURVYEAR == 2019,]
+                        , boxwex = 0.4
+                        , ylim = c(0, 120)
+                        , las = 2
+                        , cex.axis = 1.0
+                        , col = c("royalblue", "darkorange")
+                        , xaxt = "n"
+                        , xlab = ""
+                        , ylab = "Hourly Wages (HRLYEARN)"
+                        , main = "Hourly Wage by Industry - 2019 Gender Comparison")
+mtext("Industry (NAICS_18)", side=1, line=4.3)
+# Label of X Axis
+axis(1
+     , at = seq(1.5, 36, 2)
+     , labels = levels(ind.order.19)
+     , tick=FALSE
+     , cex=0.3
+     , las = 2)
+# Grey Vertical Lines
+for(i in seq(0.5, 40, 2)){ 
+  abline(v=i,lty=1, col="grey")
+}
+# Add a legend
+legend("topleft", legend = c("Males 2019", "Females 2019"), 
+       col=c("royalblue", "darkorange"),
+       pch = 15, bty = "n", pt.cex = 2, cex = 1.0,  horiz = T, inset = c(0.01, 0.01))
+wage.ind.19$stats
+
+# Males v. Females #############################################################
+# OCCUPATION ###################################################################
+# Mann Whitney U Tests
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "Mngt",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "NatASc",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "EduLaw",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "Health",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "Trades",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "BusFin",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "ArtCul",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "ManUtil",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "NatAgri",], alt = "two.sided", conf.int = T)
+wilcox.test(HRLYEARN ~ SEX,  data = data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "Sales",], alt = "two.sided", conf.int = T)
+#Boxplot Analysis
+occu.order.19 <- with(data.all[data.all$SURVYEAR == 2019,], reorder(NOC_10short, HRLYEARN, median))
+par(mar=c(16,5,2,1))
+wage.occu.19 <- boxplot(HRLYEARN ~ SEX * occu.order.19
+                          , data = data.all[data.all$SURVYEAR == 2019,]
+                          , boxwex = 0.4
+                          , ylim = c(0, 120)
+                          , las = 2
+                          , cex.axis = 1.0
+                          , col = c("royalblue", "darkorange")
+                          , xaxt = "n"
+                          , xlab = ""
+                          , ylab = "Hourly Wages (HRLYEARN)"
+                          , main = "Hourly Wage by Occupation - 2019 Gender Comparison")
+# Label of X Axis
+axis(1
+     , at = seq(1.5, 20, 2)
+     , labels = levels(occu.order.19)
+     , tick=FALSE
+     , cex=0.3
+     , las = 2)
+# Grey Vertical Lines
+for(i in seq(0.5, 20, 2)){ 
+  abline(v=i,lty=1, col="grey")
+}
+# Add a legend
+legend("topleft", legend = c("Males 2019", "Females 2019"), 
+       col=c("royalblue", "darkorange"),
+       pch = 15, bty = "n", pt.cex = 2, cex = 1.0,  horiz = T, inset = c(0.01, 0.01))
+wage.occu.19$stats
+```
+
+
+### **STEP 4: Multiple Regression Analysis**
+
+#### **Preparation before regression analysis**
+- Numeric variables normalization
+```{r}
+# Normalize numeric variables
+normalize <- function(x) {
+   return ((x - min(x)) / (max(x) - min(x))) }
+
+data.all.n <- as.data.frame(lapply(data.all[num.vars], normalize))
+summary(data.all.n)
+`%nin%` = Negate(`%in%`)
+data.all.n <- cbind(data.all[names(data.all) %nin% num.vars], data.all.n)
+```
+
+- Training and testing subsets by group
+```{r}
+# TRAINING (70%) AND TESTING (30%) SETS
+data.all.n09male <- data.all.n[data.all.n$SURVYEAR == 2009 & data.all.n$SEX == "Male",]
+data.all.n09fem <- data.all.n[data.all.n$SURVYEAR == 2009 & data.all.n$SEX == "Female",]
+data.all.n19male <- data.all.n[data.all.n$SURVYEAR == 2019 & data.all.n$SEX == "Male",]
+data.all.n19fem <- data.all.n[data.all.n$SURVYEAR == 2019 & data.all.n$SEX == "Female",]
+
+# 2009 Males
+set.seed(1)
+idx.09male <- sample(1:nrow(data.all.n09male), floor(0.7*nrow(data.all.n09male)))
+write.csv(idx.09male, file = "Train_Idx_09Male.csv", row.names=FALSE)
+train.09male <- data.all.n09male[idx.09male,]
+test.09male <- data.all.n09male[-idx.09male,]
+
+# 2009 Females
+set.seed(30)
+idx.09fem <- sample(1:nrow(data.all.n09fem), floor(0.7*nrow(data.all.n09fem)))
+write.csv(idx.09fem, file = "Train_Idx_09Fem.csv", row.names=FALSE)
+train.09fem <- data.all.n09fem[idx.09fem,]
+test.09fem <- data.all.n09fem[-idx.09fem,]
+
+# 2019 Males
+set.seed(500)
+idx.19male <- sample(1:nrow(data.all.n19male), floor(0.7*nrow(data.all.n19male)))
+write.csv(idx.19male, file = "Train_Idx_19Male.csv", row.names=FALSE)
+train.19male <- data.all.n19male[idx.19male,]
+test.19male <- data.all.n19male[-idx.19male,]
+
+# 2019 Females
+set.seed(7000)
+idx.19fem <- sample(1:nrow(data.all.n19fem), floor(0.7*nrow(data.all.n19fem)))
+write.csv(idx.19fem, file = "Train_Idx_19Fem.csv", row.names=FALSE)
+train.19fem <- data.all.n19fem[idx.19fem,]
+test.19fem <- data.all.n19fem[-idx.19fem,]
+```
+
+#### **Stepwise Regression (Both Directions)**
+
+- First Model results and diagnostic plots
+- Box Cox transformation
+- Final Model results, diagnostic plots, residuals skewness, and prediction
+- Analysis by group (Males 2009, Males 2019, Females 2009, Females 2019)
+```{r}
+# Males 2009
+# Model
+names(data.all)
+full <- lm(HRLYEARN ~ LFSSTAT+PROV+CMA+AGE_12+MARSTAT+EDUC+MJH+COWMAIN
+                     +NAICS_18+NOC_10+FTPTMAIN+UTOTHRS+TENURE+UNION+PERMTEMP
+                     +ESTSIZE+FIRMSIZE+SCHOOLN+EFAMTYPE+AGYOWNK, data = train.09male)
+null <- lm(HRLYEARN ~ 1, data = train.09male)
+model <- stepAIC(null, scope=list(lower=null, upper=full), direction= "both", trace=F) # Trace TRUE to show steps of adding and subtracting vars
+summary(model)
+# Investigating SCHOOLN Coefficient NA
+str(data.all$SCHOOLN)
+nrow(train.09male[train.09male$SCHOOLN=="Unknown",])
+# Diagnostic Plots
+# par(mfrow = c(2, 2))
+par(mar=c(5.1, 4.1, 4.1, 2.1))
+plot(model, lwd = 6)
+# Box Cox Transformation (Selected attributes from Stepwise Regression)
+bc.model <- lm(formula = HRLYEARN ~ NOC_10 + NAICS_18 + AGE_12 + PROV + EDUC + 
+                 TENURE + ESTSIZE + FIRMSIZE + AGYOWNK + PERMTEMP + FTPTMAIN + 
+                 UTOTHRS + UNION + MARSTAT + LFSSTAT + COWMAIN
+               , data = train.09male)
+bc <- boxcox(bc.model, lambda = seq(-3, 3))
+bc$x[which(bc$y==max(bc$y))]
+new.model <- lm(formula = (HRLYEARN)^0.21 ~ NOC_10 + NAICS_18 + AGE_12 + PROV + EDUC + 
+                    TENURE + ESTSIZE + AGYOWNK + FIRMSIZE + PERMTEMP + FTPTMAIN + 
+                    UTOTHRS + MARSTAT + UNION + LFSSTAT + MJH, data = train.09male)
+summary(new.model)
+par(mar=c(5.1, 4.1, 4.1, 2.1))
+plot(new.model, lwd = 6)
+# Residuals Skewness
+# Before Transformation:
+skewness(model$residuals)
+# After Transformation
+skewness(new.model$residuals)
+# Prediction
+prediction <- predict(new.model, interval = "prediction", newdata = test.09male)
+# Errors
+errors <- prediction[,"fit"] - (test.09male$HRLYEARN^0.21)
+hist(errors)
+rmse <- sqrt(sum((errors)^2)/nrow(test.09male))
+mae <- (1/nrow(test.09male))*sum(abs(errors))
+diff.percent <- 100*(abs(errors)/(test.09male$HRLYEARN^0.21))
+diff.25 <- length(diff.percent[diff.percent<=25])/nrow(test.09male)
+paste("RMSE:", rmse)
+paste("MAE:", mae)
+paste("Percentage of cases with less than 25% error:", diff.25*100)
+
+# Males 2019
+# Model
+full <- lm(HRLYEARN ~ LFSSTAT+PROV+CMA+AGE_12+MARSTAT+EDUC+MJH+COWMAIN
+           +NAICS_18+NOC_10+FTPTMAIN+UTOTHRS+TENURE+UNION+PERMTEMP
+           +ESTSIZE+FIRMSIZE+SCHOOLN+EFAMTYPE+AGYOWNK, data = train.19male)
+null <- lm(HRLYEARN ~ 1, data = train.19male)
+model <- stepAIC(null, scope=list(lower=null, upper=full), direction= "both", trace=F) # Trace TRUE to show steps of adding and subtracting vars
+summary(model)
+# Diagnostic Plots
+# par(mfrow = c(2, 2))
+par(mar=c(5.1, 4.1, 4.1, 2.1))
+plot(model, lwd = 6)
+# Box Cox Transformation (Selected attributes from Stepwise Regression)
+bc.model <- lm(formula = HRLYEARN ~ NOC_10 + NAICS_18 + AGE_12 + PROV + EDUC + 
+                 TENURE + FIRMSIZE + MARSTAT + ESTSIZE + FTPTMAIN + UTOTHRS + 
+                 PERMTEMP + EFAMTYPE + SCHOOLN + CMA + UNION + AGYOWNK + MJH + 
+                 COWMAIN
+               , data = train.19male)
+par(mar=c(15,5,2,1))
+bc <- boxcox(bc.model, lambda = seq(-3, 3))
+bc$x[which(bc$y==max(bc$y))]
+new.model <- lm(formula = (HRLYEARN)^-0.03 ~ NOC_10 + NAICS_18 + AGE_12 + PROV + EDUC + 
+                  TENURE + FIRMSIZE + MARSTAT + ESTSIZE + FTPTMAIN + UTOTHRS + 
+                  PERMTEMP + EFAMTYPE + SCHOOLN + CMA + UNION + AGYOWNK + MJH + 
+                  COWMAIN, data = train.19male)
+summary(new.model)
+par(mar=c(5.1, 4.1, 4.1, 2.1))
+plot(new.model, lwd = 6)
+# Residuals Skewness
+# Before Transformation:
+skewness(model$residuals)
+# After Transformation
+skewness(new.model$residuals)
+# Prediction
+prediction <- predict(new.model, interval = "prediction", newdata = test.19male)
+# Errors
+errors <- prediction[,"fit"] - (test.19male$HRLYEARN^-0.03)
+hist(errors)
+rmse <- sqrt(sum((errors)^2)/nrow(test.19male))
+mae <- (1/nrow(test.19male))*sum(abs(errors))
+diff.percent <- 100*(abs(errors)/(test.19male$HRLYEARN^-0.03))
+diff.25 <- length(diff.percent[diff.percent<=25])/nrow(test.19male)
+paste("RMSE:", rmse)
+paste("MAE:", mae)
+paste("Percentage of cases with less than 25% error:", diff.25*100)
+
+# Females 2009
+# Model
+full <- lm(HRLYEARN ~ LFSSTAT+PROV+CMA+AGE_12+MARSTAT+EDUC+MJH+COWMAIN
+           +NAICS_18+NOC_10+FTPTMAIN+UTOTHRS+TENURE+UNION+PERMTEMP
+           +ESTSIZE+FIRMSIZE+SCHOOLN+EFAMTYPE+AGYOWNK, data = train.09fem)
+null <- lm(HRLYEARN ~ 1, data = train.09fem)
+model <- stepAIC(null, scope=list(lower=null, upper=full), direction= "both", trace=F) # Trace TRUE to show steps of adding and subtracting vars
+summary(model)
+# Diagnostic Plots
+# par(mfrow = c(2, 2))
+par(mar=c(5.1, 4.1, 4.1, 2.1))
+plot(model, lwd = 6)
+# Box Cox Transformation (Selected attributes from Stepwise Regression)
+bc.model <- lm(formula = HRLYEARN ~ NOC_10 + NAICS_18 + EDUC + TENURE + ESTSIZE + 
+                 PROV + AGE_12 + COWMAIN + PERMTEMP + FIRMSIZE + FTPTMAIN + 
+                 UTOTHRS + UNION + AGYOWNK + SCHOOLN + CMA
+               , data = train.09fem)
+par(mar=c(15,5,2,1))
+bc <- boxcox(bc.model, lambda = seq(-3, 3))
+bc$x[which(bc$y==max(bc$y))]
+new.model <- lm(formula = (HRLYEARN)^-0.15 ~ NOC_10 + NAICS_18 + AGE_12 + PROV + EDUC + 
+                  TENURE + ESTSIZE + AGYOWNK + FIRMSIZE + PERMTEMP + FTPTMAIN + 
+                  UTOTHRS + MARSTAT + UNION + LFSSTAT + MJH, data = train.09fem)
+summary(new.model)
+par(mar=c(5.1, 4.1, 4.1, 2.1))
+plot(new.model, lwd = 6)
+# Residuals Skewness
+# Before Transformation:
+skewness(model$residuals)
+# After Transformation
+skewness(new.model$residuals)
+# Test Set Correction!!!
+# There is one observation in Test set for Females 2009 where HRLYEARN (hourly wages) is equal to zero.
+# This case cannot be analyzed later on to calculate RMSE and MAE.
+# It will be excluded from the Test Set.
+test.09fem <- test.09fem[-4518,]
+# Prediction
+prediction <- predict(new.model, interval = "prediction", newdata = test.09fem)
+# Errors
+errors <- prediction[,"fit"] - (test.09fem$HRLYEARN^(-0.15))
+hist(errors)
+rmse <- sqrt(sum((errors)^2)/nrow(test.09fem))
+mae <- (1/nrow(test.09fem))*sum(abs(errors))
+diff.percent <- 100*(abs(errors)/(test.09fem$HRLYEARN^-0.15))
+diff.25 <- length(diff.percent[diff.percent<=25])/nrow(test.09fem)
+paste("RMSE:", rmse)
+paste("MAE:", mae)
+paste("Percentage of cases with less than 25% error:", diff.25*100)
+
+
+# Females 2019
+# Model
+full <- lm(HRLYEARN ~ LFSSTAT+PROV+CMA+AGE_12+MARSTAT+EDUC+MJH+COWMAIN
+           +NAICS_18+NOC_10+FTPTMAIN+UTOTHRS+TENURE+UNION+PERMTEMP
+           +ESTSIZE+FIRMSIZE+SCHOOLN+EFAMTYPE+AGYOWNK, data = train.19fem)
+null <- lm(HRLYEARN ~ 1, data = train.19fem)
+model <- stepAIC(null, scope=list(lower=null, upper=full), direction= "both", trace=F) # Trace TRUE to show steps of adding and subtracting vars
+summary(model)
+# Diagnostic Plots
+# par(mfrow = c(2, 2))
+par(mar=c(5.1, 4.1, 4.1, 2.1))
+plot(model, lwd = 6)
+# Box Cox Transformation (Selected attributes from Stepwise Regression)
+bc.model <- lm(formula = HRLYEARN ~ NOC_10 + EDUC + TENURE + NAICS_18 + PROV + 
+                 ESTSIZE + AGE_12 + COWMAIN + PERMTEMP + FIRMSIZE + FTPTMAIN + 
+                 UTOTHRS + EFAMTYPE + LFSSTAT + SCHOOLN + MARSTAT
+               , data = train.19fem)
+par(mar=c(15,5,2,1))
+bc <- boxcox(bc.model, lambda = seq(-3, 3))
+bc$x[which(bc$y==max(bc$y))]
+new.model <- lm(formula = (HRLYEARN)^-0.15 ~ NOC_10 + EDUC + TENURE + NAICS_18 + PROV + 
+                  ESTSIZE + AGE_12 + COWMAIN + PERMTEMP + FIRMSIZE + FTPTMAIN + 
+                  UTOTHRS + EFAMTYPE + LFSSTAT + SCHOOLN + MARSTAT, data = train.19fem)
+summary(new.model)
+par(mar=c(5.1, 4.1, 4.1, 2.1))
+plot(new.model, lwd = 6)
+# Residuals Skewness
+# Before Transformation:
+skewness(model$residuals)
+# After Transformation
+skewness(new.model$residuals)
+# Prediction
+prediction <- predict(new.model, interval = "prediction", newdata = test.19fem)
+# Errors
+errors <- prediction[,"fit"] - (test.19fem$HRLYEARN^(-0.15))
+hist(errors)
+rmse <- sqrt(sum((errors)^2)/nrow(test.19fem))
+mae <- (1/nrow(test.19fem))*sum(abs(errors))
+diff.percent <- 100*(abs(errors)/(test.19fem$HRLYEARN^-0.15))
+diff.25 <- length(diff.percent[diff.percent<=25])/nrow(test.19fem)
+paste("RMSE:", rmse)
+paste("MAE:", mae)
+paste("Percentage of cases with less than 25% error:", diff.25*100)
+```
+
+
+### **STEP 5: Gender Proportions by Sector, Industry and Occupation**
+
+- Export data.all to CSV to build graphs directly on Excel
+```{r}
+# write.csv(data.all, file = "Data_All.csv", row.names=FALSE)
+```
+
+
+#### **Z-Test for Independent Proportions**
+
+- Compare proportion of women in 2009 and in 2019
+- By Sector, Industry, Occupation
+```{r}
+# SECTOR #######################################################################
+# Private
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$COWMAIN == "Private sector",])
+                , nrow(data.all.19fem[data.all.19fem$COWMAIN == "Private sector",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$COWMAIN == "Private sector",])
+                , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$COWMAIN == "Private sector",]))
+          , alternative = "greater"
+          , conf.level = 0.95)
+# Public
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$COWMAIN == "Public sector",])
+              , nrow(data.all.19fem[data.all.19fem$COWMAIN == "Public sector",]))
+        , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$COWMAIN == "Public sector",])
+              , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$COWMAIN == "Public sector",]))
+        , alternative = "less"
+        , conf.level = 0.95)
+
+# INDUSTRY ####################################################################
+# Construction
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "Const",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "Const",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "Const",])
+                , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Const",]))
+          , alternative = "less"
+          , conf.level = 0.95)
+# Forestry, Fishing, Min., Oil & Gas
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "Fores",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "Fores",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "Fores",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Fores",]))
+          , alternative = "less"
+          , conf.level = 0.95)
+# Manufacturing durables
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "ManuD",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "ManuD",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "ManuD",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "ManuD",]))
+          , alternative = "greater"
+          , conf.level = 0.95)
+# Utilities
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "Utils",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "Utils",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "Utils",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Utils",]))
+          , alternative = "less"
+          , conf.level = 0.95)
+# Transportation & Warehousing
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "Trans",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "Trans",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "Trans",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Trans",]))
+          , alternative = "less"
+          , conf.level = 0.95)
+# Wholesale Trade
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "Whole",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "Whole",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "Whole",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Whole",]))
+          , alternative = "less"
+          , conf.level = 0.95)
+# Manufacturing non-durables
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "ManuN",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "ManuN",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "ManuN",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "ManuN",]))
+          , alternative = "greater"
+          , conf.level = 0.95)
+# Agriculture
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "Agri",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "Agri",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "Agri",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Agri",]))
+          , alternative = "less"
+          , conf.level = 0.95)
+# Management, Admin. & Support
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "Mngt",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "Mngt",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "Mngt",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Mngt",]))
+          , alternative = "greater"
+          , conf.level = 0.95)
+# Prof., Scientific & Technical Services
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "ProSc",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "ProSc",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "ProSc",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "ProSc",]))
+          , alternative = "greater"
+          , conf.level = 0.95)
+# Information, Culture & Recreation
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "Info",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "Info",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "Info",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Info",]))
+          , alternative = "greater"
+          , conf.level = 0.95)
+# Public Administration
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "PubAd",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "PubAd",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "PubAd",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "PubAd",]))
+          , alternative = "less"
+          , conf.level = 0.95)
+# Other Services
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "Other",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "Other",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "Other",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Other",]))
+          , alternative = "greater"
+          , conf.level = 0.95)
+# Retail Trade
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "Rtail",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "Rtail",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "Rtail",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Rtail",]))
+          , alternative = "greater"
+          , conf.level = 0.95)
+# Finance, Insurance, Real Est. & Leas.
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "Finan",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "Finan",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "Finan",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Finan",]))
+          , alternative = "greater"
+          , conf.level = 0.95)
+# Accommodation & Food Services
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "AcFood",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "AcFood",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "AcFood",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "AcFood",]))
+          , alternative = "greater"
+          , conf.level = 0.95)
+# Educational Services
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "Educa",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "Educa",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "Educa",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Educa",]))
+          , alternative = "less"
+          , conf.level = 0.95)
+# Health Care & Social Assistance
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NAICS_18short == "Health",])
+                , nrow(data.all.19fem[data.all.19fem$NAICS_18short == "Health",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NAICS_18short == "Health",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NAICS_18short == "Health",]))
+          , alternative = "greater"
+          , conf.level = 0.95)
+
+# OCCUPATION ###################################################################
+# Trades, transport & equipm. operators
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NOC_10short == "Trades",])
+                , nrow(data.all.19fem[data.all.19fem$NOC_10short == "Trades",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NOC_10short == "Trades",])
+                 , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "Trades",]))
+          , alternative = "less"
+          , conf.level = 0.95)
+# Natural resources & agriculture
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NOC_10short == "NatAgri",])
+                , nrow(data.all.19fem[data.all.19fem$NOC_10short == "NatAgri",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NOC_10short == "NatAgri",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "NatAgri",]))
+          , alternative = "less"
+          , conf.level = 0.95)
+# Natural & applied sciences
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NOC_10short == "NatASc",])
+                , nrow(data.all.19fem[data.all.19fem$NOC_10short == "NatASc",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NOC_10short == "NatASc",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "NatASc",]))
+          , alternative = "less"
+          , conf.level = 0.95)
+# Manufacturing & utilities
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NOC_10short == "ManUtil",])
+                , nrow(data.all.19fem[data.all.19fem$NOC_10short == "ManUtil",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NOC_10short == "ManUtil",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "ManUtil",]))
+          , alternative = "greater"
+          , conf.level = 0.95)
+# Management
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NOC_10short == "Mngt",])
+                , nrow(data.all.19fem[data.all.19fem$NOC_10short == "Mngt",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NOC_10short == "Mngt",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "Mngt",]))
+          , alternative = "greater"
+          , conf.level = 0.95)
+# Art, culture, recreation & sport
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NOC_10short == "ArtCul",])
+                , nrow(data.all.19fem[data.all.19fem$NOC_10short == "ArtCul",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NOC_10short == "ArtCul",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "ArtCul",]))
+          , alternative = "greater"
+          , conf.level = 0.95)
+# Sales & service
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NOC_10short == "Sales",])
+                , nrow(data.all.19fem[data.all.19fem$NOC_10short == "Sales",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NOC_10short == "Sales",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "Sales",]))
+          , alternative = "greater"
+          , conf.level = 0.95)
+# Educ., law, community & gov. services
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NOC_10short == "EduLaw",])
+                , nrow(data.all.19fem[data.all.19fem$NOC_10short == "EduLaw",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NOC_10short == "EduLaw",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "EduLaw",]))
+          , alternative = "less"
+          , conf.level = 0.95)
+# Business, finance & administration
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NOC_10short == "BusFin",])
+                , nrow(data.all.19fem[data.all.19fem$NOC_10short == "BusFin",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NOC_10short == "BusFin",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "BusFin",]))
+          , alternative = "greater"
+          , conf.level = 0.95)
+# Health
+prop.test(x = c(nrow(data.all.09fem[data.all.09fem$NOC_10short == "Health",])
+                , nrow(data.all.19fem[data.all.19fem$NOC_10short == "Health",]))
+          , n = c(nrow(data.all[data.all$SURVYEAR == 2009 & data.all$NOC_10short == "Health",])
+                  , nrow(data.all[data.all$SURVYEAR == 2019 & data.all$NOC_10short == "Health",]))
+          , alternative = "greater"
+          , conf.level = 0.95)
+```
